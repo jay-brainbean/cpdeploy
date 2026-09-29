@@ -1,0 +1,31 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+if (version_compare(PHP_VERSION, '8.1.0', '<')) {
+    fwrite(STDERR, 'cpdeploy needs PHP 8.1 or newer (this is PHP ' . PHP_VERSION . ").\n");
+    exit(3);
+}
+
+(static function (): void {
+    foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+        if (is_file($autoload)) {
+            require $autoload;
+
+            return;
+        }
+    }
+    fwrite(STDERR, "cpdeploy: dependencies are missing. Run: composer install\n");
+    exit(1);
+})();
+
+// --allow-root is a hidden option for CI only (CLI-01): strip it before parsing.
+$argv = $_SERVER['argv'] ?? [];
+$allowRoot = in_array('--allow-root', $argv, true);
+$argv = array_values(array_filter($argv, static fn ($a): bool => $a !== '--allow-root'));
+
+$services = new Cpdeploy\Services(new Cpdeploy\Support\Environment());
+$application = new Cpdeploy\Application($services, $allowRoot);
+
+exit($application->run(new Symfony\Component\Console\Input\ArgvInput($argv)));

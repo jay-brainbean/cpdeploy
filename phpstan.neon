@@ -1,0 +1,9 @@
+parameters:
+    level: 8
+    # The minimum supported PHP: flags any syntax or function newer than 8.1.
+    phpVersion: 80100
+    paths:
+        - src
+        - bin/cpdeploy
+        - tests
+    tmpDir: build/phpstan

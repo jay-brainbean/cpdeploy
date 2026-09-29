@@ -1,0 +1,66 @@
+# Architecture
+
+The full specification is `cpdeploy-development-plan.md` (§6). This page
+summarises the rules and the pieces that exist so far.
+
+## Layers
+
+```text
+Presentation   Commands/  Menus/  Wizard/        no business logic
+     │ calls
+Services       Deploy/, Config/, Env/, Runtime/, Git/, Check/, …
+     │ uses
+Adapters       Support/Shell, Support/Http, Support/Fs, Cpanel/Uapi, GitHub/…
+```
+
+- A menu action and its CLI command call the same service method (ARC-03).
+- Services never call Laravel Prompts. They get answers from an `Ui\Asker`
+  and report progress to an `Ui\Reporter` (ARC-04):
+
+  | Situation | Asker | Reporter |
+  |---|---|---|
+  | Terminal | `PromptsAsker` | `TaskReporter` |
+  | No TTY / `-n` | `NonInteractiveAsker` | `PlainReporter` |
+  | Tests | `ScriptedAsker` | `MemoryReporter` |
+
+- Every external program runs through `Support\Shell` (ARC-05).
+- Every path comes from `Config\Paths` (ARC-06).
+- Objects are wired by hand in `src/Services.php` (ARC-07).
+- Every user-facing error is a `CpdeployException` with an `ErrorCode`
+  (ARC-09); `Application` renders it in the §13 format.
+
+## Startup
+
+`bin/cpdeploy` → `Application::doRun()`:
+
+1. `umask 022` (FS-06); `NO_COLOR` handling.
+2. `--version` prints and exits.
+3. Refuse root (CLI-01) unless the hidden `--allow-root` is given.
+4. Except for `list` and `help`: create `~/cpdeploy` with its modes, re-apply
+   the modes of secrets (LAY-02), load and validate `config.yml`, clean stale
+   `tmp/` entries (LAY-03).
+5. Install signal handlers (LCK-04), then run the command.
+6. `CpdeployException` → §13 message and its exit code. Any other exception →
+   exit 1 and `~/cpdeploy/crash.log`.
+
+## Running commands (`Support\Shell`)
+
+- Argument arrays, never a shell, except `pipeline()` (`bash -o pipefail -c`)
+  built from `Shell::quote()`d parts (SH-01).
+- The environment is rebuilt from scratch: a fixed base plus the run's
+  additions; `GIT_DIR` and `GIT_WORK_TREE` are never passed (SH-03).
+- Each command starts under `setsid`. A timeout or Ctrl+C sends SIGTERM to the
+  whole process group, then SIGKILL after 10 s (SH-05).
+- Output is masked, then written to the operation log and streamed to the
+  reporter (SH-04, LOG-04).
+- `ProcessResult` recognises out-of-memory (SH-06) and full-disk (SH-07)
+  failures; `Shell::failure()` turns them into `E_OOM` / `E_DISK`.
+
+## Filesystem safety (`Support\Fs`)
+
+- `writeAtomic()`: temp file with the final mode, fsync, rename (FS-01).
+- `swapSymlink()`: new link under a temp name, renamed over the old one;
+  never `ln -sfn` (FS-02). `linkRelative()` always writes relative links (LAY-01).
+- `deleteTree()` never follows a symlink, only deletes inside `tmp/`, `tools/`
+  or a site's `releases/`, refuses the live release, and refuses any path
+  reached through a symlinked folder (FS-03).
