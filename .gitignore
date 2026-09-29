@@ -1,0 +1,6 @@
+/vendor/
+/dist/
+/build/
+/.phpunit.cache/
+/.php-cs-fixer.cache
+/tests/.tmp/

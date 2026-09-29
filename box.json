@@ -1,0 +1,19 @@
+{
+    "main": "bin/cpdeploy",
+    "output": "dist/cpdeploy.phar",
+    "directories": ["src", "resources"],
+    "finder": [
+        {
+            "in": "vendor",
+            "notName": ["*.md", "phpunit.xml*", "CHANGELOG*", "UPGRADE*"],
+            "exclude": ["Tests", "tests", "test", "docs"]
+        }
+    ],
+    "compression": "NONE",
+    "check-requirements": true,
+    "exclude-composer-files": false,
+    "exclude-dev-files": true,
+    "replacements": {
+        "package_version": "@package_version@"
+    }
+}
