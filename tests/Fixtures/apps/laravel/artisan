@@ -2,7 +2,9 @@
 <?php
 // Fake artisan for cpdeploy scenario tests (plan §16.2). The "database" is
 // storage/app/.fake-db.json (shared storage, so it survives releases); every call
-// is logged to storage/logs/fake-artisan.log with the PHP that ran it.
+// is logged to storage/logs/fake-artisan.log with the PHP that ran it. A migration
+// containing FAKE_FAIL fails; one containing FAKE_KILL kill -9s the running cpdeploy
+// (its PID is in $CPD_STATE_FILE), to simulate an interrupted deploy.
 $base = __DIR__;
 $args = array_values(array_filter(array_slice($argv, 1), static fn ($a) => !in_array($a, ['--no-interaction', '--ansi', '--no-ansi'], true)));
 $cmd = $args[0] ?? 'list';
@@ -68,6 +70,15 @@ switch ($cmd) {
     case 'migrate':
         $ran ??= [];
         foreach ($pending as $name) {
+            if (str_contains((string) file_get_contents($files[$name]), 'FAKE_KILL')) {
+                file_put_contents($dbFile, json_encode($ran));
+                $state = json_decode((string) @file_get_contents((string) getenv('CPD_STATE_FILE')), true);
+                $pid = (int) ($state['pid'] ?? 0);
+                if ($pid > 1) { // never 0: that would signal the whole process group
+                    exec('kill -9 ' . $pid);
+                }
+                exit(1);
+            }
             if (str_contains((string) file_get_contents($files[$name]), 'FAKE_FAIL')) {
                 file_put_contents($dbFile, json_encode($ran));
                 echo "  {$name} ........ FAIL\n  SQLSTATE[42S01]: Base table or view already exists\n";

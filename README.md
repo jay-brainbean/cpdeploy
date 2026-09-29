@@ -4,12 +4,12 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestones M0–M3 are in place: the tool
-> installs, `cpdeploy check` inspects the server, and `cpdeploy deploy` builds
-> and activates releases for a site described by a hand-written `site.yml`.
-> Rollback and recovery (M4), the menus (M5) and the add-site wizard (M6) come
-> next. The specification is
-> [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
+> **Status:** under development. Milestones M0–M4 are in place: the tool
+> installs, `cpdeploy check` inspects the server, `cpdeploy deploy` builds and
+> activates releases for a site described by a hand-written `site.yml`, and
+> `cpdeploy rollback` / `cpdeploy recover` switch back and repair interrupted
+> operations. The menus (M5) and the add-site wizard (M6) come next. The
+> specification is [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
 
@@ -152,6 +152,57 @@ command says so. Without a terminal, questions must be answered with flags or
 
 Files marked `export-ignore` in `.gitattributes` are not deployed.
 
+Before building, a deploy also warns about changes made on the live site
+outside git: an edited `.htaccess` (from cPanel Redirects, Hotlink Protection,
+Directory Privacy, or by hand; on a terminal you can see the diff or cancel),
+and other files changed on the server since the last deploy. A `.user.ini` or
+`php.ini` that cPanel replaced with a real file is copied into shared first, so
+the new release keeps it.
+
+If the health check fails after go-live (exit 7), what happens depends on
+`health_check.on_failure` or `--on-health-fail`:
+
+- `ask` (the default): on a terminal, *Roll back*, *Keep the new release* or
+  *View log*. Without a terminal, cpdeploy rolls back unless migrations ran in
+  this deploy, in which case it keeps the new release (rolling code back after
+  migrations is riskier).
+- `rollback`: switch back to the previous release.
+- `keep`: keep the new release and report the failure.
+
+## Roll back
+
+```sh
+cpdeploy rollback shop --previous --yes     # the release before the live one
+cpdeploy rollback shop 20260928-181002      # a specific release (asks to confirm)
+cpdeploy rollback shop                      # pick from a list (terminal)
+```
+
+A rollback re-links the release's shared files, rebuilds Laravel's caches with
+the PHP that release was built with, brings it out of maintenance mode, switches
+`current`, and runs the health check. It never touches the database, `.env` or
+shared storage, so it warns first about migrations that newer releases ran. With
+`php.sync_multiphp`, the domain's PHP follows the release: an older PHP is set
+after the switch, a newer one before it.
+
+## Interrupted operations
+
+If a deploy or rollback is killed part-way (a lost SSH session, `kill -9`), it
+leaves `~/cpdeploy/sites/<site>/.deploy-state.json` behind. The next command for
+that site stops with exit 11 until it is recovered:
+
+```sh
+cpdeploy recover shop --yes      # or: cpdeploy deploy shop --recover
+```
+
+Recovery finishes or undoes what the interrupted operation was doing, according
+to how far it got: it brings the previous release out of maintenance mode, puts
+`current` and the document root back, sets the domain's PHP back, or completes
+the bookkeeping of a switch that already happened. It then tells you what to
+check (for example `php artisan migrate:status` after interrupted migrations).
+On a terminal, `deploy` and `rollback` offer to recover first.
+
+## Status, releases and settings
+
 ```sh
 cpdeploy status                 # all sites
 cpdeploy status shop --json
@@ -165,8 +216,8 @@ cpdeploy config shop edit       # opens site.yml in your editor, then validates 
 Exit codes: 0 done (or nothing to do), 2 an answer or valid setting is missing,
 3 a check failed, 4 the build failed, 5 a migration failed (the previous
 release is back up), 6 go-live failed, 7 the site didn't pass the health check
-after go-live (the new release is kept), 10 another operation is running,
-11 an earlier operation was interrupted.
+after go-live (rolled back or kept, as described above), 8 a rollback failed,
+10 another operation is running, 11 an earlier operation was interrupted.
 
 ## Uninstall
 

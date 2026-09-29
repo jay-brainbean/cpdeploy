@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Commands;
 
+use Cpdeploy\Deploy\Recovery;
+use Cpdeploy\Deploy\StateFile;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Support\Lock;
@@ -94,6 +96,11 @@ final class ReleasesCommand extends SiteCommand
 
         $lock = Lock::site($this->services->paths()->siteLock($site), $site, 'releases', $this->services->system()->userName(), Version::get(), $this->services->clock());
         try {
+            // REC-01: an interrupted operation must be recovered before the releases change.
+            $state = new StateFile($this->services->paths()->stateFile($site), $this->services->fs());
+            if ($state->exists()) {
+                throw Recovery::interrupted($site, $state->read() ?? []);
+            }
             match ($action) {
                 'protect' => $releases->protect($site, $id, true),
                 'unprotect' => $releases->protect($site, $id, false),

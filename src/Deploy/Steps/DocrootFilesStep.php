@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Cpdeploy\Deploy\Steps;
 
 use Cpdeploy\Config\Paths;
+use Cpdeploy\Config\SiteConfig;
 use Cpdeploy\Deploy\DeployContext;
 use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Runtime\PhpInstall;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Support\Fs;
+use Cpdeploy\Support\Log;
 use RuntimeException;
 
 /**
@@ -58,44 +60,56 @@ final class DocrootFilesStep implements Step
         if (!self::ready($ctx)) {
             return 'after the build';
         }
-        $web = (string) $ctx->release?->webPath($ctx->site->webDir());
-        $shared = $this->paths->sharedDocrootDir($ctx->name());
+        $php = $ctx->sitePhp();
+
+        return implode(' · ', $this->linkWeb($ctx->site, (string) $ctx->release?->webPath($ctx->site->webDir()), $php->family, PhpInstall::majorMinorOf($php->version), $ctx->log));
+    }
+
+    /**
+     * Links the docroot extras into $web and injects the handler block for
+     * $family/$majorMinor. Idempotent, so a rollback can re-apply it to its
+     * target with the target's PHP (RB-06). Returns what was done.
+     *
+     * @return list<string>
+     */
+    public function linkWeb(SiteConfig $site, string $web, string $family, string $majorMinor, ?Log $log = null): array
+    {
+        $shared = $this->paths->sharedDocrootDir($site->name());
         $done = [];
 
         try {
-            foreach ($ctx->site->docrootDirs() as $dir) {
-                if ($this->providedByRepo($ctx, $web, $dir)) {
+            foreach ($site->docrootDirs() as $dir) {
+                if ($this->providedByRepo($web, $dir, $log)) {
                     continue;
                 }
-                $this->fs->ensureDir($this->paths->sharedDir($ctx->name()), Paths::MODE_ROOT);
+                $this->fs->ensureDir($this->paths->sharedDir($site->name()), Paths::MODE_ROOT);
                 $this->fs->ensureDir($shared, Paths::MODE_ROOT);
                 $this->fs->ensureDir($shared . '/' . $dir, Paths::MODE_PUBLIC_DIR);
                 $this->link($web . '/' . $dir, $shared . '/' . $dir);
                 $done[] = $dir;
             }
-            foreach ($ctx->site->docrootFiles() as $file) {
-                if (!is_file($shared . '/' . $file) || $this->providedByRepo($ctx, $web, $file)) {
+            foreach ($site->docrootFiles() as $file) {
+                if (!is_file($shared . '/' . $file) || $this->providedByRepo($web, $file, $log)) {
                     continue;
                 }
                 $this->link($web . '/' . $file, $shared . '/' . $file);
                 $done[] = $file;
             }
-            $php = $ctx->sitePhp();
-            if ($this->docroots->injectHandler($ctx->site, $web, $php->family, PhpInstall::majorMinorOf($php->version))) {
+            if ($this->docroots->injectHandler($site, $web, $family, $majorMinor)) {
                 $done[] = 'PHP handler';
             }
         } catch (RuntimeException $e) {
             throw new CpdeployException(ErrorCode::SHARED, "Couldn't link a docroot file: " . $e->getMessage(), 'See the log.');
         }
 
-        return implode(' · ', $done);
+        return $done;
     }
 
-    private function providedByRepo(DeployContext $ctx, string $web, string $path): bool
+    private function providedByRepo(string $web, string $path, ?Log $log): bool
     {
         $full = $web . '/' . $path;
         if (file_exists($full) && !is_link($full)) {
-            $ctx->log?->write("docroot extra '{$path}' provided by the repo — not linked");
+            $log?->write("docroot extra '{$path}' provided by the repo — not linked");
 
             return true;
         }

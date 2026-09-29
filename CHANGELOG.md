@@ -7,6 +7,23 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M4 safety net: `cpdeploy rollback <site> [release] [--previous]` (§11.8) —
+  target checks, the target's own PHP, warnings about migrations newer releases
+  ran and PHP changes, optimize before the switch, maintenance off, MultiPHP
+  ordering, health check with an offer to switch back.
+- `cpdeploy recover <site>` and `deploy --recover` (§11.9): an interrupted
+  deploy or rollback is finished or undone according to the phase it reached;
+  `deploy` and `rollback` offer it on a terminal, other commands stop with exit
+  11 until it is done.
+- A failed health check after go-live is rolled back or kept
+  (`health_check.on_failure`, `--on-health-fail`); without a terminal, rolled
+  back unless migrations ran (HC-03, NI-04).
+- Drift warnings at preflight: the live `.htaccess` changed outside git, with a
+  diff and a chance to cancel (DOC-05), and files changed on the server since
+  the last deploy, found through `.release-manifest` (DOC-06). A `.user.ini` or
+  `php.ini` that cPanel replaced with a real file is copied into shared (REL-06).
+- Scenario tests that really kill a deploy (building, migrating, after the
+  switch) and recover it; the `real-laravel` job now also rolls back.
 - M3 deploy engine: `cpdeploy deploy <site>` builds each deploy in its own
   release folder and switches to it atomically. Phase A plans (fetch, change
   analysis, runtimes, preflight checks, questions up front), Phase B builds

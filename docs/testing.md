@@ -77,6 +77,7 @@ Tests never use the network: every TCP probe goes to a closed local port
 | `CPDEPLOY_GIT_URL_OVERRIDE` | Every git remote URL (e.g. `file:///…/remote.git`) |
 | `CPDEPLOY_GITHUB_API` | The GitHub API base URL (a `FakeGitHub`) |
 | `CPDEPLOY_HTTP_OVERRIDE` | `host:port` that health-check and release-marker requests go to, over plain HTTP |
+| `CPDEPLOY_TEST_ANSWERS` | A JSON list of answers: the CLI uses a `ScriptedAsker` and counts as interactive (an answer may be `["label fragment", value]`) |
 
 ## Deploy scenarios (`tests/Support/DeployScenario.php`)
 
@@ -102,6 +103,12 @@ CLI against:
 
 The site is a hand-written `site.yml` (`writeSite()`) and `shared/.env`
 (`writeEnv()`).
+
+Interruption tests (`RecoveryTest`) really kill a running deploy: with
+`CPD_STATE_FILE` pointing at the site's `.deploy-state.json`, `CPD_FAKE_NPM=kill`
+(during the build), a migration containing `FAKE_KILL` (during migrations) or an
+`after_activate` custom command send SIGKILL to the PID recorded there. `runCli()`
+reports a killed process as exit 128 + signal.
 
 ## Real Laravel (`tests/RealLaravel`)
 

@@ -9,8 +9,8 @@ use Cpdeploy\Tests\Support\DeployScenario;
 /**
  * The `real-laravel` CI job (§16.6): a real laravel/laravel app, real Composer,
  * real Node, SQLite; fakes only for uapi and the web server. Deploys twice (the
- * second with Composer skipped) and checks the site answers through the docroot
- * symlink.
+ * second with Composer skipped), rolls back to the first release (§17 M4), and
+ * checks the site answers through the docroot symlink each time.
  *
  * Runs only when CPDEPLOY_REAL_LARAVEL_APP names a `composer create-project
  * laravel/laravel` folder. Optional:
@@ -108,8 +108,9 @@ final class RealLaravelTest extends DeployScenario
      * @covers-req CMP-04
      * @covers-req CMP-05
      * @covers-req HC-02
+     * @covers-req RB-06
      */
-    public function testFirstAndSecondDeploy(): void
+    public function testFirstAndSecondDeployThenRollback(): void
     {
         $first = $this->deploy(['--yes']);
         $this->assertExit(0, $first);
@@ -133,5 +134,16 @@ final class RealLaravelTest extends DeployScenario
         self::assertStringContainsString('composer: reuse vendor/ (--composer=no)', $second['stdout']);
         self::assertStringStartsWith('200 ', $this->get('/'));
         self::assertCount(2, $this->history());
+
+        // M4: roll back to the first release; its config cache is rebuilt there.
+        unlink($a . '/bootstrap/cache/config.php');
+        $rollback = $this->runCli(['rollback', self::SITE, '--previous', '--yes'], null, 600);
+        $this->assertExit(0, $rollback);
+        $this->assertInvariants();
+        self::assertSame($a, $this->liveDir());
+        self::assertFileExists($a . '/bootstrap/cache/config.php');
+        self::assertStringStartsWith('200 ', $this->get('/'));
+        $history = $this->history();
+        self::assertSame(['rollback', 'success'], [$history[2]['action'], $history[2]['result']]);
     }
 }

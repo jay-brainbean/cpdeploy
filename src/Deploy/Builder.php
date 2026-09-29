@@ -40,6 +40,7 @@ final class Builder
         private readonly MigrationStatus $migrations,
         private readonly Shell $shell,
         private readonly Fs $fs,
+        private readonly ReleaseManifest $manifest,
     ) {
     }
 
@@ -96,8 +97,8 @@ final class Builder
     }
 
     /**
-     * B10: the release marker for the health check (HC-01; a random name, SEC-09),
-     * status ready, durations.
+     * B10: the manifest (DOC-06), the release marker for the health check (HC-01;
+     * a random name, SEC-09), status ready, durations.
      */
     private function ready(DeployContext $ctx): void
     {
@@ -105,6 +106,7 @@ final class Builder
         if ($release === null) {
             return;
         }
+        $this->manifest->write($release->dir);
         $web = $release->webPath($ctx->site->webDir());
         if (is_dir($web)) {
             $marker = '.cpd-release-' . bin2hex(random_bytes(16)) . '.txt';

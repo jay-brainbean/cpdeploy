@@ -7,7 +7,9 @@ namespace Cpdeploy;
 use Cpdeploy\Commands\CheckCommand;
 use Cpdeploy\Commands\ConfigCommand;
 use Cpdeploy\Commands\DeployCommand;
+use Cpdeploy\Commands\RecoverCommand;
 use Cpdeploy\Commands\ReleasesCommand;
+use Cpdeploy\Commands\RollbackCommand;
 use Cpdeploy\Commands\StatusCommand;
 use Cpdeploy\Commands\TokenCommand;
 use Cpdeploy\Config\Paths;
@@ -39,7 +41,9 @@ final class Application extends ConsoleApplication
         $this->add(new CheckCommand($services));
         $this->add(new ConfigCommand($services));
         $this->add(new DeployCommand($services));
+        $this->add(new RecoverCommand($services));
         $this->add(new ReleasesCommand($services));
+        $this->add(new RollbackCommand($services));
         $this->add(new StatusCommand($services));
         $this->add(new TokenCommand($services));
     }

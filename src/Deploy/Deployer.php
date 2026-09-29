@@ -73,6 +73,8 @@ final class Deployer
         private readonly GoLive $goLive,
         private readonly Finisher $finisher,
         private readonly Masker $masker,
+        private readonly Recovery $recovery,
+        private readonly Rollback $rollback,
     ) {
     }
 
@@ -84,16 +86,9 @@ final class Deployer
         $started = microtime(true);
         $lock = Lock::site($this->paths->siteLock($name), $name, 'deploy', $this->system->userName(), Version::get(), $this->clock);
         try {
+            // REC-01: an interrupted operation is recovered first (--recover, or asked on a TTY).
+            $this->recovery->beforeOperation($name, $flags->recover, $asker, $reporter);
             $state = new StateFile($this->paths->stateFile($name), $this->fs);
-            if ($state->exists()) {
-                $data = $state->read() ?? [];
-                throw new CpdeployException(
-                    ErrorCode::INTERRUPTED,
-                    sprintf('An earlier %s of %s was interrupted (phase: %s)', (string) ($data['operation'] ?? 'operation'), $name, (string) ($data['phase'] ?? 'unknown')),
-                    "Run: cpdeploy recover {$name}",
-                    liveAffected: in_array($data['phase'] ?? '', [StateFile::MAINTENANCE, StateFile::MIGRATING, StateFile::MULTIPHP, StateFile::SWITCHING, StateFile::CONVERTING_DOCROOT], true),
-                );
-            }
             $log = Log::open($this->paths->logsDir($name), 'deploy', $this->masker, $this->clock, [
                 'tool' => 'cpdeploy ' . Version::get(),
                 'tool php' => PHP_VERSION . ' (' . PHP_BINARY . ')',
@@ -183,21 +178,20 @@ final class Deployer
             $ctx->shims = null;
         }
 
-        // Phase D — finish.
-        $this->finisher->cleanup($ctx);
+        // HC-03: a failed health check is rolled back or kept, before Phase D prunes.
         $result = $live->result;
         $exit = 0;
         $message = '';
-        $this->latePendingMigrations($ctx, $live, $result);
+        $rolledBack = null;
         $health = $live->health;
         if ($health !== null && !$health->ok) {
-            // HC-03 (rollback on failure) arrives with M4: the new release is kept.
-            $message = sprintf('%s returned %s after go-live — the new release was kept', $health->url, $health->status > 0 ? (string) $health->status : 'no response');
-            if ($live->migrationsRun) {
-                $message .= ' (migrations ran in this deploy; the previous code may not work with the new database)';
-            }
-            $result = DeployResult::WARNING;
-            $exit = 7;
+            [$result, $exit, $message, $rolledBack] = $this->healthFailed($ctx, $live, $health);
+        }
+
+        // Phase D — finish.
+        $this->finisher->cleanup($ctx);
+        if ($rolledBack === null) {
+            $this->latePendingMigrations($ctx, $live, $result);
         }
         foreach ($ctx->plan()->notes() as $note) {
             $ctx->notes[] = $note;
@@ -217,10 +211,15 @@ final class Deployer
             $this->system->userName(),
             array_values(array_unique($ctx->notes)),
         );
+        if ($rolledBack !== null) {
+            $this->rollback->history($rolledBack[0], $rolledBack[1], microtime(true) - $rolledBack[2], $log->path);
+        }
         $state->delete();
 
         $url = 'https://' . $ctx->site->domain();
-        $reporter->info(sprintf('Live in %s · %s', Format::duration($duration), $url));
+        if ($rolledBack === null) {
+            $reporter->info(sprintf('Live in %s · %s', Format::duration($duration), $url));
+        }
 
         return new DeployResult($result, $exit, $ctx->release?->id, $url, $duration, $ctx->notes, $ctx->warnings, $log->path, $message);
     }
@@ -451,6 +450,94 @@ final class Deployer
             return;
         }
         $ctx->phpChange = PhpService::phpChange($current->tag(), $ctx->sitePhp()->tag());
+    }
+
+    /**
+     * HC-03 / NI-04: the new release is live but failed its health check.
+     *
+     * @return array{0: string, 1: int, 2: string, 3: array{0: RollbackJob, 1: RollbackResult, 2: float}|null}
+     *         result, exit code, message, and the rollback that ran (for its history entry)
+     */
+    private function healthFailed(DeployContext $ctx, GoLiveResult $live, HealthResult $health): array
+    {
+        $status = $health->status > 0 ? (string) $health->status : 'no response';
+        $failed = sprintf('%s returned %s after go-live', $health->url, $status);
+        $migrationsNote = $live->migrationsRun ? ' (migrations ran in this deploy; the previous code may not work with the new database)' : '';
+        $previous = $ctx->live;
+        if ($previous === null) {
+            $ctx->note('health: failed on the first deploy; nothing to roll back to');
+
+            return [DeployResult::WARNING, 7, $failed . ' — this was the first deploy, so there is nothing to roll back to', null];
+        }
+
+        $policy = $ctx->flags->onHealthFail ?? $ctx->site->healthOnFailure();
+        if ($policy !== 'rollback' && $policy !== 'keep') {
+            if ($ctx->asker->interactive() && !$ctx->flags->yes) {
+                $policy = $this->askHealth($ctx, $health, $previous, $live->migrationsRun);
+            } else {
+                // NI-04: rolling code back after migrations is riskier than keeping it.
+                $policy = $live->migrationsRun ? 'keep' : 'rollback';
+                $ctx->log?->write("Health check failed; non-interactive policy: {$policy} (NI-04)");
+            }
+        }
+        if ($policy === 'keep') {
+            $ctx->note('health: failed; the new release was kept');
+
+            return [DeployResult::WARNING, 7, $failed . ' — the new release was kept' . $migrationsNote, null];
+        }
+
+        $release = $ctx->release ?? throw new \LogicException('No release');
+        $started = microtime(true);
+        try {
+            $job = $this->rollback->prepare($ctx->site, $previous, $release, $ctx->reporter, $ctx->asker, $ctx->log, $ctx->plan()->healthCheck, false);
+        } catch (CpdeployException $e) {
+            $ctx->warn("Can't roll back to {$previous->id}: " . $e->getMessage());
+            $ctx->note('health: failed; the new release was kept (rollback not possible)');
+
+            return [DeployResult::WARNING, 7, $failed . ' — the new release was kept' . $migrationsNote, null];
+        }
+        $ctx->reporter->info("Rolling back to {$previous->id} ({$previous->short()})");
+        $job->showRisks();
+        // The rollback writes (and removes) its own state file (§8.7).
+        $ctx->state = null;
+        try {
+            $rolled = $this->rollback->run($job);
+        } catch (CpdeployException $e) {
+            $this->rollback->history($job, new RollbackResult('failed', $e->exitCode(), $previous->id, $release->id, $previous->commit(), $release->commit(), [...$job->notes, $e->errorCode->value . ': ' . strtok($e->getMessage(), "\n")]), microtime(true) - $started, $ctx->log?->path);
+            throw $e;
+        }
+        foreach ($rolled->warnings as $warning) {
+            if (!in_array($warning, $ctx->warnings, true)) {
+                $ctx->warnings[] = $warning;
+            }
+        }
+        $ctx->note("health: failed; rolled back to {$previous->id}");
+
+        return [DeployResult::FAILED, 7, sprintf('%s — rolled back to %s (%s)%s', $failed, $previous->id, $previous->short(), $migrationsNote), [$job, $rolled, $started]];
+    }
+
+    /**
+     * The §9.4 health-check failure prompt.
+     */
+    private function askHealth(DeployContext $ctx, HealthResult $health, Release $previous, bool $migrationsRun): string
+    {
+        if ($migrationsRun) {
+            $ctx->reporter->warn('Migrations ran in this deploy; the previous code may not work with the new database.');
+        }
+        while (true) {
+            $choice = $ctx->asker->select(
+                sprintf('%s returned %s after go-live (%d attempt%s).', $health->url, $health->status > 0 ? (string) $health->status : 'no response', $health->attempts, $health->attempts === 1 ? '' : 's'),
+                ['rollback' => "Roll back to {$previous->id} ({$previous->short()})", 'keep' => 'Keep the new release', 'log' => 'View log'],
+                'rollback',
+            );
+            if ($choice !== 'log') {
+                return (string) $choice;
+            }
+            $ctx->reporter->info('Log: ' . ($ctx->log->path ?? '(none)'));
+            foreach (array_slice(explode("\n", trim((string) @file_get_contents((string) $ctx->log?->path))), -20) as $line) {
+                $ctx->reporter->info('  ' . $line);
+            }
+        }
     }
 
     /**

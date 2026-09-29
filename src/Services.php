@@ -25,7 +25,10 @@ use Cpdeploy\Deploy\GoLive;
 use Cpdeploy\Deploy\HealthChecker;
 use Cpdeploy\Deploy\PlanBuilder;
 use Cpdeploy\Deploy\Preflight;
+use Cpdeploy\Deploy\Recovery;
 use Cpdeploy\Deploy\ReleaseManager;
+use Cpdeploy\Deploy\ReleaseManifest;
+use Cpdeploy\Deploy\Rollback;
 use Cpdeploy\Deploy\SiteStatus;
 use Cpdeploy\Deploy\StepRunner;
 use Cpdeploy\Deploy\Steps\ComposerStep;
@@ -73,6 +76,7 @@ use Cpdeploy\Ui\Pager;
 use Cpdeploy\Ui\PlainReporter;
 use Cpdeploy\Ui\PromptsAsker;
 use Cpdeploy\Ui\Reporter;
+use Cpdeploy\Ui\ScriptedAsker;
 use Cpdeploy\Ui\TaskReporter;
 use Cpdeploy\Ui\Theme;
 use Symfony\Component\Console\Input\InputInterface;
@@ -406,7 +410,7 @@ final class Services
 
     public function preflight(): Preflight
     {
-        return new Preflight($this->paths(), $this->fs(), $this->masker(), $this->docroots(), $this->composerInspector(), $this->quota(), $this->dbCheck());
+        return new Preflight($this->paths(), $this->fs(), $this->masker(), $this->docroots(), $this->composerInspector(), $this->quota(), $this->dbCheck(), $this->git(), new ReleaseManifest($this->fs()));
     }
 
     public function deployer(): Deployer
@@ -424,6 +428,7 @@ final class Services
             $this->migrations(),
             $this->shell(),
             $this->fs(),
+            new ReleaseManifest($this->fs()),
         );
         $goLive = new GoLive(
             $this->shell(),
@@ -468,7 +473,65 @@ final class Services
             new PlanBuilder(),
             $builder,
             $goLive,
-            new Finisher($this->releases(), $this->paths(), $this->fs(), $this->masker(), $this->clock()),
+            $this->finisher(),
+            $this->masker(),
+            $this->recovery(),
+            $this->rollbackService(),
+        );
+    }
+
+    public function finisher(): Finisher
+    {
+        return new Finisher($this->releases(), $this->paths(), $this->fs(), $this->masker(), $this->clock());
+    }
+
+    public function recovery(): Recovery
+    {
+        return new Recovery(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->system(),
+            $this->sites(),
+            $this->releases(),
+            $this->php(),
+            $this->domains(),
+            $this->multiPhp(),
+            $this->docroots(),
+            $this->maintenance(),
+            $this->finisher(),
+            $this->masker(),
+            $this->shell(),
+        );
+    }
+
+    /**
+     * §11.8. (Named rollbackService: Services has no state to roll back.)
+     */
+    public function rollbackService(): Rollback
+    {
+        return new Rollback(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->system(),
+            $this->config(),
+            $this->sites(),
+            $this->domains(),
+            $this->releases(),
+            $this->php(),
+            $this->phpLocator(),
+            $this->multiPhp(),
+            $this->docroots(),
+            new LinkSharedStep($this->paths(), $this->fs()),
+            new DocrootFilesStep($this->paths(), $this->fs(), $this->docroots()),
+            $this->artisan(),
+            $this->maintenance(),
+            $this->healthChecker(),
+            $this->finisher(),
+            $this->recovery(),
+            $this->signals(),
+            $this->shell(),
             $this->masker(),
         );
     }
@@ -520,6 +583,13 @@ final class Services
 
     public function asker(InputInterface $input): Asker
     {
+        // Test mode only (§16.2): scripted answers make a subprocess "interactive".
+        $scripted = $this->environment->testing('CPDEPLOY_TEST_ANSWERS');
+        if ($scripted !== null && $input->isInteractive()) {
+            $answers = json_decode($scripted, true);
+
+            return new ScriptedAsker(is_array($answers) ? array_values($answers) : []);
+        }
         if ($this->isInteractive($input)) {
             return new PromptsAsker();
         }
