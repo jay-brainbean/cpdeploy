@@ -94,7 +94,9 @@ abstract class TestCase extends BaseTestCase
         $this->env['CPDEPLOY_FIXTURES'] = dirname(__DIR__) . '/Fixtures';
         $this->env['CPD_UAPI_STATE'] = $this->tmp;
 
-        return $this->fakeBin('uapi', "#!/usr/bin/env php\n<?php\n" . <<<'PHP'
+        // PHP_BINARY, not `env php`: child processes get a fixed PATH (SH-03), which
+        // misses PHP installed elsewhere (Homebrew on Apple Silicon, Herd, asdf).
+        return $this->fakeBin('uapi', '#!' . PHP_BINARY . "\n<?php\n" . <<<'PHP'
             $args = array_slice($argv, 1);
             $args = array_values(array_filter($args, static fn ($a) => !str_starts_with($a, '--output')));
             [$module, $function] = [$args[0] ?? '', $args[1] ?? ''];

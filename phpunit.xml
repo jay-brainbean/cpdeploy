@@ -7,6 +7,12 @@
          failOnRisky="true"
          failOnWarning="true"
          executionOrder="depends,defects">
+    <php>
+        <!-- Fixture repos are built with git in the test process; keep the developer's
+             ~/.gitconfig and /etc/gitconfig (signing, hooks, templates) out of them. -->
+        <env name="GIT_CONFIG_GLOBAL" value="/dev/null" force="true"/>
+        <env name="GIT_CONFIG_NOSYSTEM" value="1" force="true"/>
+    </php>
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
