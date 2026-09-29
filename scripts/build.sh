@@ -49,7 +49,11 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cpd-build-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 if [ "$DIRTY" = "1" ]; then
-    git ls-files -z --cached --others --exclude-standard | tar --null -T - -cf - | tar -xf - -C "$WORK"
+    # Tracked and untracked files, minus ones deleted in the working tree.
+    # shellcheck disable=SC2016
+    git ls-files -z --cached --others --exclude-standard \
+        | php -r 'foreach (explode("\0", stream_get_contents(STDIN)) as $f) { if ($f !== "" && file_exists($f)) { echo $f, "\0"; } }' \
+        | tar --null -T - -cf - | tar -xf - -C "$WORK"
 else
     git archive --format=tar HEAD | tar -xf - -C "$WORK"
 fi

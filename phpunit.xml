@@ -17,6 +17,9 @@
         <testsuite name="Scenario">
             <directory>tests/Scenario</directory>
         </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

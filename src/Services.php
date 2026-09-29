@@ -14,6 +14,13 @@ use Cpdeploy\Cpanel\MultiPhpService;
 use Cpdeploy\Cpanel\MysqlService;
 use Cpdeploy\Cpanel\QuotaService;
 use Cpdeploy\Cpanel\Uapi;
+use Cpdeploy\Git\DeployKeyService;
+use Cpdeploy\Git\GitRepository;
+use Cpdeploy\Git\HostKeys;
+use Cpdeploy\Git\Transport;
+use Cpdeploy\GitHub\GitHubApi;
+use Cpdeploy\GitHub\TokenService;
+use Cpdeploy\GitHub\TokenStore;
 use Cpdeploy\Runtime\ComposerInstaller;
 use Cpdeploy\Runtime\NodeInstaller;
 use Cpdeploy\Runtime\NodeLocator;
@@ -238,6 +245,54 @@ final class Services
         return new PackageManager($this->shell(), $this->fs(), $this->paths());
     }
 
+    public function git(): GitRepository
+    {
+        return new GitRepository($this->shell(), $this->fs(), (float) $this->config()->timeout('git'));
+    }
+
+    /**
+     * CPDEPLOY_GIT_URL_OVERRIDE (test mode only) replaces every remote URL, e.g. file:///….
+     */
+    public function transport(): Transport
+    {
+        return new Transport(TcpProbe::fromEnvironment($this->environment), $this->environment->testing('CPDEPLOY_GIT_URL_OVERRIDE'));
+    }
+
+    public function hostKeys(): HostKeys
+    {
+        return new HostKeys($this->fs(), $this->paths()->knownHosts(), HostKeys::embeddedPath());
+    }
+
+    public function tokens(): TokenStore
+    {
+        return new TokenStore($this->paths(), $this->fs(), $this->masker());
+    }
+
+    /**
+     * The GitHub API with the stored token (or $token). CPDEPLOY_GITHUB_API (test
+     * mode only) replaces https://api.github.com.
+     */
+    public function github(?string $token = null): GitHubApi
+    {
+        return new GitHubApi(
+            $this->http(),
+            $this->masker(),
+            rtrim($this->environment->testing('CPDEPLOY_GITHUB_API') ?? GitHubApi::DEFAULT_BASE, '/'),
+            $token ?? $this->tokens()->get(),
+            (float) $this->config()->timeout('http'),
+        );
+    }
+
+    public function tokenService(): TokenService
+    {
+        return new TokenService($this->tokens(), fn (string $token): GitHubApi => $this->github($token));
+    }
+
+    public function deployKeys(): DeployKeyService
+    {
+        return new DeployKeyService($this->shell(), $this->paths(), $this->git(), $this->transport());
+    }
+
     public function serverCheck(): ServerCheck
     {
         return new ServerCheck($this->shell(), $this->system(), new ServerCheckServices(
@@ -251,6 +306,9 @@ final class Services
             TcpProbe::fromEnvironment($this->environment),
             $this->config(),
             is_file($this->paths()->tokenFile()),
+            $this->tokenService(),
+            $this->hostKeys(),
+            $this->clock(),
         ));
     }
 

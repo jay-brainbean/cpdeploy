@@ -628,7 +628,7 @@ releases/<id>/
   - `.gitmodules` exists → `E_SUBMODULES`
   - `.gitattributes` contains `filter=lfs` → `E_LFS`
 - **GIT-15 (default branch).** `git ls-remote --symref <url> HEAD` → parse `ref: refs/heads/<name>`.
-- **GIT-16 (repair).** Fetch output containing `bad object`, `corrupt` or `does not appear to be a git repository` → offer re-clone:
+- **GIT-16 (repair).** Fetch output containing `bad object`, `corrupt`, `does not appear to be a git repository`, `inflate: data stream error`, `failed to read delta`, `unable to read` or `packfile` (the last four seen with a real damaged pack) → offer re-clone:
   1. rename `repo.git` to `repo.git.broken-<ts>`
   2. clone fresh
   3. delete the broken copy on success; restore it on failure

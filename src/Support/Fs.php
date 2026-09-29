@@ -151,8 +151,9 @@ final class Fs
     /**
      * FS-03 (CRITICAL): delete a tree without ever following a symlink.
      *
-     * Allowed only strictly inside tmp/, tools/ or a site's releases/ folder, and
-     * never the target of a site's `current` link. A symlink at $path itself is
+     * Allowed only strictly inside tmp/, tools/ or a site's releases/ folder, or
+     * a site's bare mirror (repo.git, repo.git.broken-<ts>), and never the target
+     * of a site's `current` link. A symlink at $path itself is
      * unlinked, not descended into.
      */
     public function deleteTree(string $path): void
@@ -187,6 +188,10 @@ final class Fs
             if (count($parts) >= 3 && $parts[1] === 'releases' && $parts[2] !== '') {
                 $allowed = true;
                 $releaseSite = $parts[0];
+            }
+            // sites/<site>/repo.git and repo.git.broken-<ts>: the bare mirror (GIT-16 repair).
+            if (count($parts) === 2 && preg_match('/^repo\.git(\.broken-[0-9-]+)?$/', $parts[1]) === 1) {
+                $allowed = true;
             }
         }
         if (!$allowed) {

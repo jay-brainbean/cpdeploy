@@ -4,9 +4,9 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestones M0 (foundation and distribution)
-> and M1 (server knowledge) are in place: the tool installs and
-> `cpdeploy check` inspects the server. Deploying arrives in later milestones. The specification is
+> **Status:** under development. Milestones M0–M2 are in place: the tool
+> installs, `cpdeploy check` inspects the server, and the GitHub token and
+> deploy-key plumbing exists. Deploying arrives in later milestones. The specification is
 > [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
@@ -61,10 +61,40 @@ It checks, in groups:
 - **Account:** disk and inode use against the quota.
 - **Network:** GitHub over SSH (port 22, or 443 as a fallback), and the
   Composer and Node.js download sites.
+- **GitHub:** the optional token (valid, whose, when it expires) and GitHub's
+  SSH host keys.
 
 Each line is ✓ (fine), ⚠ (works, with a limitation) or ✗ (must be fixed), with
 a hint. The command exits 3 when anything is ✗. Without a UTF-8 locale the
 symbols are `[ok]`, `[!]` and `[x]`.
+
+## GitHub token (optional)
+
+cpdeploy reads your repositories with a read-only **deploy key** per site.
+Without a token, you add that key on GitHub yourself (cpdeploy shows the key
+and the link). With a token, cpdeploy adds and removes the keys for you.
+
+Create a **fine-grained** token at github.com → Settings → Developer settings →
+Fine-grained tokens:
+
+- Repository access: only the repos you deploy
+- Permissions: **Administration: Read and write** (Metadata: Read is added
+  automatically)
+- Expiration: your choice; cpdeploy warns 14 days before it expires
+
+```sh
+cpdeploy token set        # asks for it (hidden), checks it with GitHub, saves it
+cpdeploy token test       # who it belongs to and when it expires
+cpdeploy token remove
+```
+
+The token is stored in `~/cpdeploy/secrets/github-token` (mode 600) and never
+appears on a command line or in logs. Classic tokens (`ghp_…`) work but grant
+far more than cpdeploy needs.
+
+cpdeploy trusts only GitHub's published SSH host keys (shipped with the tool
+and written to `~/cpdeploy/known_hosts`); it never edits `~/.ssh/config` or
+`~/.ssh/known_hosts`.
 
 ## Uninstall
 
@@ -83,6 +113,8 @@ running; their data stays in `~/cpdeploy/sites`.
 | `~/cpdeploy/app/` | The tool (`cpdeploy.phar`, and the previous version) |
 | `~/cpdeploy/config.yml` | Global settings (mode 600) |
 | `~/cpdeploy/secrets/` | The optional GitHub token (mode 700) |
+| `~/cpdeploy/known_hosts` | GitHub's SSH host keys |
+| `~/.ssh/cpdeploy_<site>` | Each site's deploy key |
 | `~/cpdeploy/tools/` | Downloaded Composer and Node, shared by all sites |
 | `~/cpdeploy/sites/` | One folder per site |
 

@@ -39,7 +39,15 @@ Helpers:
   reports the given version, SAPI and modules to probes and runs everything
   else with the real PHP, with `CPD_FAKE_PHP=ea-php82` set.
 - `LocalServer`: PHP's built-in web server on 127.0.0.1, for fake Composer and
-  Node mirrors and, later, the GitHub API.
+  Node mirrors.
+- `FakeGitHub`: a fake GitHub REST API (`tests/Support/FakeGitHub/router.php`)
+  with the endpoints of plan §7.5. It checks the required headers, keeps
+  deploy keys in `state.json`, records every request (`calls()`), answers 422
+  for a key already in use, and simulates problem tokens: `expired` (401),
+  `ratelimited` (403, rate limit), `boom` (500), and repos in `noAdmin` (403 on
+  `/keys`).
+- Git remotes are local bare repositories reached through
+  `CPDEPLOY_GIT_URL_OVERRIDE=file://…`.
 - `runCli($args)`: run `bin/cpdeploy` in a subprocess with only the test
   environment. It adds the hidden `--allow-root` when the tests run as root
   (for example in a container).
@@ -63,8 +71,23 @@ Tests never use the network: every TCP probe goes to a closed local port
 | `CPDEPLOY_TCP_OVERRIDE` | `host:port=ip:port,…` (`*` for any) for network probes |
 | `CPDEPLOY_HTTP_NO_BACKOFF=1` | No waiting between HTTP retries |
 
-Later milestones add `CPDEPLOY_GIT_URL_OVERRIDE`, `CPDEPLOY_GITHUB_API` and
-`CPDEPLOY_HTTP_OVERRIDE` (plan §16.2).
+| `CPDEPLOY_GIT_URL_OVERRIDE` | Every git remote URL (e.g. `file:///…/remote.git`) |
+| `CPDEPLOY_GITHUB_API` | The GitHub API base URL (a `FakeGitHub`) |
+
+`CPDEPLOY_HTTP_OVERRIDE` arrives with the health check (plan §16.2).
+
+## SSH integration tests
+
+`tests/Integration/SshIntegrationTest.php` starts its own `sshd` on 127.0.0.1
+that accepts only a freshly generated deploy key, and checks real SSH through
+cpdeploy's `GIT_SSH_COMMAND`: key accepted, host-key mismatch refused, unknown
+key refused. It needs `sshd` and runs only when asked:
+
+```sh
+CPDEPLOY_SSH_INTEGRATION=1 vendor/bin/phpunit --testsuite Integration
+```
+
+CI runs it in the `ssh-integration` job.
 
 ## Fixtures from real servers
 

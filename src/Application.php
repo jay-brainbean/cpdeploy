@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cpdeploy;
 
 use Cpdeploy\Commands\CheckCommand;
+use Cpdeploy\Commands\TokenCommand;
 use Cpdeploy\Config\Paths;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
@@ -32,6 +33,7 @@ final class Application extends ConsoleApplication
         $this->setAutoExit(false);
 
         $this->add(new CheckCommand($services));
+        $this->add(new TokenCommand($services));
     }
 
     public function getLongVersion(): string
@@ -137,6 +139,8 @@ final class Application extends ConsoleApplication
         foreach ($config->warnings as $warning) {
             $errors->writeln(sprintf('<fg=yellow>%s</> config.yml: %s', $this->services->theme()->symbol('warn'), $warning));
         }
+        // GIT-03: cpdeploy's own known_hosts, from the keys shipped with this build.
+        $this->services->hostKeys()->install();
         $fs->cleanTmp();
     }
 

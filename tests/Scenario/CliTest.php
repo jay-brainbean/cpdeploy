@@ -95,7 +95,7 @@ final class CliTest extends TestCase
         $data = json_decode($r['stdout'], true);
         self::assertIsArray($data, 'stdout is a single JSON document: ' . $r['stdout']);
         self::assertSame(1, $data['schema']);
-        self::assertSame(['Tool', 'Programs', 'cPanel', 'Account', 'Network'], array_column($data['groups'], 'name'));
+        self::assertSame(['Tool', 'Programs', 'cPanel', 'Account', 'Network', 'GitHub'], array_column($data['groups'], 'name'));
         $failed = false;
         foreach ($data['groups'] as $group) {
             foreach ($group['checks'] as $check) {
