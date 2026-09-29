@@ -22,6 +22,7 @@ final class ServerCheck
     public const GROUP_CPANEL = 'cPanel';
     public const GROUP_ACCOUNT = 'Account';
     public const GROUP_NETWORK = 'Network';
+    public const GROUP_GITHUB = 'GitHub';
 
     /** Account usage thresholds (§9.7): ⚠ above 80 %, ✗ above 95 %. */
     public const WARN_PERCENT = 80.0;
@@ -69,6 +70,9 @@ final class ServerCheck
         }
         if ($only === null || in_array(self::GROUP_NETWORK, $only, true)) {
             $groups[] = new CheckGroup(self::GROUP_NETWORK, $this->networkChecks($this->services));
+        }
+        if ($only === null || in_array(self::GROUP_GITHUB, $only, true)) {
+            $groups[] = new CheckGroup(self::GROUP_GITHUB, $this->githubChecks($this->services));
         }
 
         return $groups;
@@ -273,6 +277,47 @@ final class ServerCheck
         $checks[] = $ok[$node]
             ? CheckResult::ok('network.node', "Node.js downloads ({$node})")
             : CheckResult::warn('network.node', "Can't reach {$node}", 'Only needed to download Node.js; ask your host or change mirrors.node');
+
+        return $checks;
+    }
+
+    /**
+     * Token valid, login, expiry (⚠ under 14 days); host keys match the published
+     * fingerprints (§9.7, GH-05, GIT-03).
+     *
+     * @return list<CheckResult>
+     */
+    public function githubChecks(ServerCheckServices $s): array
+    {
+        $checks = [];
+        if (!$s->tokens->has()) {
+            $checks[] = CheckResult::info('github.token', 'No GitHub token (optional: deploy keys are added by hand)');
+        } else {
+            try {
+                $user = $s->tokens->test();
+                $now = $s->clock->now();
+                $expiry = $user->expiresAt === null ? 'no expiry' : 'expires ' . Format::local($user->expiresAt) . ' (' . Format::relative($user->expiresAt, $now) . ')';
+                $message = sprintf('GitHub token for %s, %s', $user->login, $expiry);
+                $checks[] = match (true) {
+                    $user->expiresWithin($now) => CheckResult::warn('github.token', $message, 'Create a new token and run: cpdeploy token set'),
+                    $user->classic => CheckResult::warn('github.token', $message . ' (classic token)', 'A fine-grained token with Administration: Read and write is safer'),
+                    default => CheckResult::ok('github.token', $message),
+                };
+            } catch (CpdeployException $e) {
+                $checks[] = in_array($e->errorCode->value, ['E_GITHUB_DOWN', 'E_GITHUB_RATE'], true)
+                    ? CheckResult::warn('github.token', "Couldn't check the GitHub token: " . $e->getMessage(), $e->hint)
+                    : CheckResult::fail('github.token', $e->getMessage(), $e->hint);
+            }
+        }
+
+        $problems = $s->hostKeys->problems();
+        if ($problems !== []) {
+            $checks[] = CheckResult::fail('github.hostkeys', "This build's GitHub host keys don't match GitHub's published fingerprints: " . $problems[0], 'Run: cpdeploy self-update');
+        } elseif (!$s->hostKeys->installedMatches()) {
+            $checks[] = CheckResult::warn('github.hostkeys', '~/cpdeploy/known_hosts differs from the GitHub keys shipped with cpdeploy', 'It is rewritten the next time cpdeploy starts');
+        } else {
+            $checks[] = CheckResult::ok('github.hostkeys', "GitHub host keys match GitHub's published fingerprints");
+        }
 
         return $checks;
     }

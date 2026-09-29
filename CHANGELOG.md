@@ -7,6 +7,11 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M2 GitHub and git: repository addresses, per-site read-only deploy keys
+  (create, register with a token or by hand, test, rotate, remove), the bare
+  mirror (clone, fetch, resolve branches/tags/commits, export, repair), pinned
+  GitHub host keys, port 22 → 443 fallback, and the GitHub API.
+- `cpdeploy token set|test|remove`, and a GitHub group in `cpdeploy check`.
 - M1 server knowledge: cPanel UAPI access (domains, MultiPHP, MySQL, quota),
   PHP detection (EasyApache and CloudLinux alt-php, the domain's current PHP,
   PHP Selector), checksum-verified Composer and Node.js downloads, Node version

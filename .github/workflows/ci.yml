@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 3 * * *'   # nightly, for ssh-integration against the current runner image
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -96,3 +99,20 @@ jobs:
         with:
           name: cpdeploy-phar
           path: dist/
+
+  ssh-integration:
+    # A throwaway sshd on 127.0.0.1 accepts only a generated deploy key; git runs
+    # through cpdeploy's GIT_SSH_COMMAND and known_hosts (GIT-02, GIT-06, SEC-04).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pcntl, posix
+          coverage: none
+      - run: sudo apt-get install -y -q openssh-server
+      - run: composer install --no-interaction --no-progress
+      - run: vendor/bin/phpunit --testsuite Integration
+        env:
+          CPDEPLOY_SSH_INTEGRATION: '1'

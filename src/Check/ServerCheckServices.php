@@ -11,7 +11,10 @@ use Cpdeploy\Cpanel\MultiPhpService;
 use Cpdeploy\Cpanel\MysqlService;
 use Cpdeploy\Cpanel\QuotaService;
 use Cpdeploy\Cpanel\Uapi;
+use Cpdeploy\Git\HostKeys;
+use Cpdeploy\GitHub\TokenService;
 use Cpdeploy\Runtime\PhpLocator;
+use Cpdeploy\Support\Clock;
 use Cpdeploy\Support\TcpProbe;
 
 /**
@@ -30,6 +33,9 @@ final class ServerCheckServices
         public readonly TcpProbe $probe,
         public readonly GlobalConfig $config,
         public readonly bool $hasToken,
+        public readonly TokenService $tokens,
+        public readonly HostKeys $hostKeys,
+        public readonly Clock $clock,
     ) {
     }
 }
