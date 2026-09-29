@@ -28,6 +28,8 @@ final class TokenStoreTest extends TestCase
         self::assertSame(0700, fileperms($this->root . '/secrets') & 0777);
         chmod($file, 0644);
         self::assertSame('github_pat_11AAAAAAA0123456789abc', $store->get());
+        // PHP < 8.3 keeps the pre-chmod stat entry cached; read the mode from disk.
+        clearstatcache(true, $file);
         self::assertSame(0600, fileperms($file) & 0777, 'Modes re-applied before reading');
         self::assertStringNotContainsString('github_pat_11AAAAAAA0123456789abc', $services->masker()->mask('x github_pat_11AAAAAAA0123456789abc'));
 
