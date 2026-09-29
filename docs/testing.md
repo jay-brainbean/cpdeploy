@@ -52,6 +52,10 @@ Helpers:
   environment. It adds the hidden `--allow-root` when the tests run as root
   (for example in a container).
 
+`phpunit.xml` sets `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`, so
+your own git settings (commit or tag signing, `core.hooksPath`, templates) don't
+reach the fixture repositories the tests build.
+
 Tests never use the network: every TCP probe goes to a closed local port
 (`CPDEPLOY_TCP_OVERRIDE`), and downloads come from `LocalServer` mirrors.
 
