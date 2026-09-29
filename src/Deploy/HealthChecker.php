@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Cpdeploy\Deploy;
 
 use Closure;
+use Cpdeploy\Config\Paths;
 use Cpdeploy\Config\Schema\SiteSchema;
 use Cpdeploy\Config\SiteConfig;
+use Cpdeploy\Support\Fs;
 use Cpdeploy\Support\Http;
 use Cpdeploy\Support\HttpResponse;
 
@@ -107,6 +109,28 @@ final class HealthChecker
                 return new HealthResult(false, $last->status, $seconds, $url, $attempts, $warnings, $last->error);
             }
             ($this->sleep)(self::GAP);
+        }
+    }
+
+    /**
+     * HTTP-04: which PHP version serves the site. A probe file with a random name
+     * (SEC-09) is written into $webPath, requested, and deleted in every case.
+     * Returns the version, or null when the site didn't answer with one.
+     */
+    public function servedPhp(SiteConfig $site, ?string $ip, string $webPath, Fs $fs): ?string
+    {
+        $name = '.cpd-probe-' . bin2hex(random_bytes(16)) . '.php';
+        $file = $webPath . '/' . $name;
+        try {
+            $fs->writeAtomic($file, "<?php echo PHP_VERSION;\n", Paths::MODE_PUBLIC_FILE);
+            [$response] = $this->get($site->domain(), $ip, '/' . $name, 15);
+            $body = trim($response->body);
+
+            return $response->status === 200 && preg_match('/^\d+\.\d+\.\d+\S*$/', $body) === 1 ? $body : null;
+        } finally {
+            if (is_file($file)) {
+                @unlink($file);
+            }
         }
     }
 

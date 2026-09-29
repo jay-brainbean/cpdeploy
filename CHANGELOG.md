@@ -7,6 +7,17 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M5 menus: `cpdeploy` opens the main menu on a terminal (site table, banners
+  for interrupted operations, maintenance mode and the GitHub token), the deploy
+  screen (with *Retry* / *Retry with changes…* after a failure, and *Generate
+  APP_KEY now*), *Deploy with changes…*, and Manage site with Roll back,
+  Releases, PHP version (with the served-PHP probe), Node version, Deploy
+  steps, Environment, Laravel tools, Branch, Deploy key, Composer credentials,
+  Logs & history and Site info.
+- Commands behind the same screens: `php`, `node`, `env`, `artisan`, `down`,
+  `up`, `logs`, `key`, and `menu`.
+- `.env` changes keep a backup (last 10), can be restored, and can be applied to
+  the live site (`php artisan optimize`); values are quoted safely.
 - M4 safety net: `cpdeploy rollback <site> [release] [--previous]` (§11.8) —
   target checks, the target's own PHP, warnings about migrations newer releases
   ran and PHP changes, optimize before the switch, maintenance off, MultiPHP

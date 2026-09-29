@@ -6,6 +6,7 @@ namespace Cpdeploy\Commands;
 
 use Cpdeploy\Deploy\DeployFlags;
 use Cpdeploy\Deploy\DeployResult;
+use Cpdeploy\Ui\Theme;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -57,7 +58,14 @@ final class DeployCommand extends SiteCommand
         $reporter = $this->services->reporter($input, $output);
         $result = $this->services->deployer()->deploy($site, $flags, $this->services->asker($input), $reporter);
 
-        $theme = $this->services->theme();
+        return self::report($result, $output, $this->services->theme());
+    }
+
+    /**
+     * The warnings and message after a deploy; returns its exit code.
+     */
+    public static function report(DeployResult $result, OutputInterface $output, Theme $theme): int
+    {
         if ($result->result === DeployResult::NOTHING) {
             return 0;
         }

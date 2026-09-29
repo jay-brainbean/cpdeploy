@@ -4,9 +4,17 @@ declare(strict_types=1);
 
 namespace Cpdeploy;
 
+use Cpdeploy\Commands\ArtisanCommand;
 use Cpdeploy\Commands\CheckCommand;
 use Cpdeploy\Commands\ConfigCommand;
 use Cpdeploy\Commands\DeployCommand;
+use Cpdeploy\Commands\EnvCommand;
+use Cpdeploy\Commands\KeyCommand;
+use Cpdeploy\Commands\LogsCommand;
+use Cpdeploy\Commands\MaintenanceCommand;
+use Cpdeploy\Commands\MenuCommand;
+use Cpdeploy\Commands\NodeCommand;
+use Cpdeploy\Commands\PhpCommand;
 use Cpdeploy\Commands\RecoverCommand;
 use Cpdeploy\Commands\ReleasesCommand;
 use Cpdeploy\Commands\RollbackCommand;
@@ -15,6 +23,7 @@ use Cpdeploy\Commands\TokenCommand;
 use Cpdeploy\Config\Paths;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
+use Cpdeploy\Ui\ErrorView;
 use Symfony\Component\Console\Application as ConsoleApplication;
 use Symfony\Component\Console\Input\InputDefinition;
 use Symfony\Component\Console\Input\InputInterface;
@@ -38,14 +47,25 @@ final class Application extends ConsoleApplication
         $this->setCatchExceptions(false);
         $this->setAutoExit(false);
 
+        $this->add(new ArtisanCommand($services));
         $this->add(new CheckCommand($services));
         $this->add(new ConfigCommand($services));
         $this->add(new DeployCommand($services));
+        $this->add(new MenuCommand($services));
+        $this->add(new MaintenanceCommand($services, true));
+        $this->add(new EnvCommand($services));
+        $this->add(new KeyCommand($services));
+        $this->add(new LogsCommand($services));
+        $this->add(new NodeCommand($services));
+        $this->add(new PhpCommand($services));
         $this->add(new RecoverCommand($services));
         $this->add(new ReleasesCommand($services));
         $this->add(new RollbackCommand($services));
         $this->add(new StatusCommand($services));
         $this->add(new TokenCommand($services));
+        // UIG-01: `cpdeploy` alone opens the menu (the list without a terminal).
+        $this->setDefaultCommand('menu');
+        $this->add(new MaintenanceCommand($services, false));
     }
 
     public function getLongVersion(): string
@@ -91,8 +111,9 @@ final class Application extends ConsoleApplication
                 );
             }
 
-            $name = $this->getCommandName($input);
-            if ($name !== null && !in_array($name, self::NO_BOOTSTRAP, true)) {
+            // UIG-01: no command → the menu on a terminal (which bootstraps), else the list.
+            $name = $this->getCommandName($input) ?? ($this->services->isInteractive($input) || $this->services->environment()->testing('CPDEPLOY_TEST_ANSWERS') !== null ? 'menu' : 'list');
+            if (!in_array($name, self::NO_BOOTSTRAP, true)) {
                 $this->bootstrap($output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output);
             }
             $this->services->signals()->install();
@@ -129,6 +150,9 @@ final class Application extends ConsoleApplication
         $paths = $this->services->paths();
         $fs = $this->services->fs();
         $first = !is_dir($paths->root());
+        if ($first) {
+            $this->services->markFirstRun();
+        }
 
         foreach ($paths->skeleton() as $dir => $mode) {
             if (!is_dir($dir)) {
@@ -184,15 +208,7 @@ final class Application extends ConsoleApplication
         $theme = $this->services->theme();
         $err = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
-        $lines = [sprintf('<fg=red>%s</> %s', $theme->symbol('fail'), $this->escape($masker->mask($e->getMessage())))];
-        $lines[] = '  Live site: ' . ($e->liveAffected ? '<fg=yellow>affected — see the message</>' : 'not changed');
-        if ($e->hint !== '') {
-            $lines[] = '  Fix: ' . $this->escape($masker->mask($e->hint));
-        }
-        if ($e->logPath !== null) {
-            $lines[] = '  Log: ' . $e->logPath;
-        }
-        $err->writeln($lines);
+        $err->writeln(ErrorView::lines($e, $masker, $theme));
 
         if ($input->hasParameterOption(['--json'], true)) {
             $output->writeln((string) json_encode([
@@ -230,10 +246,5 @@ final class Application extends ConsoleApplication
         } catch (Throwable) {
             return null;
         }
-    }
-
-    private function escape(string $text): string
-    {
-        return str_replace('<', '\\<', $text);
     }
 }

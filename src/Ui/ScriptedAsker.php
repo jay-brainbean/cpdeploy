@@ -52,6 +52,23 @@ final class ScriptedAsker implements Asker
         return $answer;
     }
 
+    public function multiselect(string $label, array $options, array $default = [], string $hint = ''): array
+    {
+        $answer = $this->next('multiselect', $label);
+        if (!is_array($answer)) {
+            throw new LogicException("Scripted answer for \"{$label}\" must be a list of option values");
+        }
+        $out = [];
+        foreach ($answer as $value) {
+            if ((!is_int($value) && !is_string($value)) || !array_key_exists($value, $options)) {
+                throw new LogicException(sprintf('Scripted answer "%s" is not an option of "%s": %s', is_scalar($value) ? (string) $value : '?', $label, implode(', ', array_keys($options))));
+            }
+            $out[] = $value;
+        }
+
+        return $out;
+    }
+
     public function search(string $label, Closure $options, string $placeholder = '', string $hint = ''): int|string
     {
         $answer = $this->next('search', $label);

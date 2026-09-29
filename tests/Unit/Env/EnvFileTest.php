@@ -93,4 +93,57 @@ final class EnvFileTest extends TestCase
             }
         }
     }
+
+    /**
+     * @covers-req ENV-03
+     */
+    public function testSetReplacesActivatesInsertsOrAppends(): void
+    {
+        $env = EnvFile::parse("APP_NAME=Shop\nexport APP_ENV=local\n# DB_HOST=127.0.0.1\nDB_CONNECTION=mysql\n\nMAIL_MAILER=log\n");
+
+        $replaced = $env->set('APP_ENV', 'production');
+        self::assertSame("APP_NAME=Shop\nexport APP_ENV=production\n# DB_HOST=127.0.0.1\nDB_CONNECTION=mysql\n\nMAIL_MAILER=log\n", $replaced->toString());
+
+        $activated = $env->set('DB_HOST', 'localhost');
+        self::assertStringContainsString("\nDB_HOST=localhost\nDB_CONNECTION=mysql", $activated->toString());
+        self::assertStringNotContainsString('# DB_HOST', $activated->toString());
+
+        $grouped = $env->set('DB_PORT', '3306');
+        self::assertStringContainsString("DB_CONNECTION=mysql\nDB_PORT=3306\n", $grouped->toString());
+
+        $appended = $env->set('SENTRY_DSN', 'https://x@y/1');
+        self::assertStringEndsWith("MAIL_MAILER=log\nSENTRY_DSN=https://x@y/1\n", $appended->toString());
+        self::assertSame('https://x@y/1', EnvFile::parse($appended->toString())->get('SENTRY_DSN'));
+    }
+
+    /**
+     * @covers-req ENV-04
+     */
+    public function testQuotingOnWrite(): void
+    {
+        self::assertSame('plain-value_1.2/3:4@5+6,7', EnvFile::quote('K', 'plain-value_1.2/3:4@5+6,7'));
+        self::assertSame("'pa\$\$word'", EnvFile::quote('K', 'pa$$word'));
+        self::assertSame('"two words \\"quoted\\" \\\\ end"', EnvFile::quote('K', 'two words "quoted" \\ end'));
+        self::assertSame('"line1\\nline2"', EnvFile::quote('K', "line1\nline2"));
+
+        foreach (['pa$$word', 'two words "quoted" \\ end', "line1\nline2", "it's"] as $value) {
+            self::assertSame($value, EnvFile::parse(EnvFile::parse('')->set('K', $value)->toString())->get('K'), 'round trip of ' . $value);
+        }
+
+        $this->expectException(CpdeployException::class);
+        EnvFile::quote('K', "\$it's");
+    }
+
+    /**
+     * @covers-req ENV-03
+     */
+    public function testUnsetRemovesActiveLinesOnly(): void
+    {
+        $env = EnvFile::parse("A=1\n# B=2\nB=\"multi\nline\"\nC=3\n")->unset('B');
+
+        self::assertSame("A=1\n# B=2\nC=3\n", $env->toString());
+        self::assertSame(['A', 'C'], $env->keys());
+        $this->expectException(CpdeployException::class);
+        EnvFile::parse('')->set('1BAD', 'x');
+    }
 }

@@ -4,12 +4,12 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestones M0–M4 are in place: the tool
-> installs, `cpdeploy check` inspects the server, `cpdeploy deploy` builds and
-> activates releases for a site described by a hand-written `site.yml`, and
-> `cpdeploy rollback` / `cpdeploy recover` switch back and repair interrupted
-> operations. The menus (M5) and the add-site wizard (M6) come next. The
-> specification is [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
+> **Status:** under development. Milestones M0–M5 are in place: the tool
+> installs, checks the server, deploys, rolls back and recovers sites described
+> by a hand-written `site.yml`, and `cpdeploy` opens a menu to deploy and manage
+> them. The add-site wizard (M6) comes next; until then, sites are added by
+> writing `site.yml`. The specification is
+> [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
 
@@ -200,6 +200,57 @@ to how far it got: it brings the previous release out of maintenance mode, puts
 the bookkeeping of a switch that already happened. It then tells you what to
 check (for example `php artisan migrate:status` after interrupted migrations).
 On a terminal, `deploy` and `rollback` offer to recover first.
+
+## The menu
+
+Run `cpdeploy` on its own (in a terminal) for the menu:
+
+- the site table, with what is live and the last deploy or rollback;
+- warnings at the top for an interrupted operation (*Recover now*) or a site in
+  maintenance mode (*Turn off*), and for a GitHub token that is invalid or
+  expires within 14 days;
+- *Deploy a site*: the same deploy as `cpdeploy deploy`, with its questions. If
+  it fails you can view the log, *Retry*, or *Retry with changes…*. An empty
+  `APP_KEY` can be generated right there;
+- *Manage a site*: *Deploy now*, *Deploy with changes…* (another branch, tag or
+  commit; skip or force Composer; skip the build, migrations or optimize),
+  *Roll back…*, *Releases*, *PHP version*, *Node version*, *Deploy steps*,
+  *Environment (.env)*, *Laravel tools*, *Branch*, *Deploy key*, *Composer
+  credentials*, *Logs & history* and *Site info*;
+- *Logs & history* across all sites, and *Server check*.
+
+Without a terminal, `cpdeploy` prints the command list. Every menu action has a
+command, below, and both do exactly the same thing.
+
+## Managing a site from the command line
+
+```sh
+cpdeploy php shop                     # site, domain and live-release PHP
+cpdeploy php shop 8.3 --redeploy --yes
+cpdeploy php shop 8.3 --no-redeploy --switch-now   # set the domain's PHP now
+cpdeploy node shop 20                 # or auto, none
+cpdeploy env shop list                # secrets masked; --reveal shows them
+cpdeploy env shop set MAIL_HOST=smtp.example.com --apply
+echo "$SECRET" | cpdeploy env shop set MAIL_PASSWORD=-   # from stdin
+cpdeploy env shop unset MAIL_HOST
+cpdeploy env shop edit                # in your editor, validated on save
+cpdeploy env shop restore             # list backups; restore <name> --yes
+cpdeploy env shop apply               # php artisan optimize on the live release
+cpdeploy artisan shop -- migrate:status
+cpdeploy down shop --secret=let-me-in # maintenance mode; up shop to end it
+cpdeploy key shop show | test | rotate
+cpdeploy logs shop                    # history; logs shop --last, <release id>, --failed
+```
+
+Every `.env` change is saved with a backup in
+`~/cpdeploy/sites/<site>/shared/env-backups/` (the last 10 are kept). Laravel
+caches its config per release, so a change reaches the live site after
+`env apply` (`--apply`, or say Yes on a terminal) or the next deploy.
+
+`artisan` runs in the live release with the PHP it was built with. Commands
+that can destroy data (`migrate:fresh`, `migrate:reset`, `migrate:refresh`,
+`migrate:rollback`, `db:wipe`, `db:seed`, `key:generate`) ask you to type the
+site name, or need `--yes` without a terminal.
 
 ## Status, releases and settings
 

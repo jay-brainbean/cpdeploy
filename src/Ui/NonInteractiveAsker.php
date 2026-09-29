@@ -26,6 +26,14 @@ final class NonInteractiveAsker implements Asker
         throw $this->needs($label);
     }
 
+    public function multiselect(string $label, array $options, array $default = [], string $hint = ''): array
+    {
+        if ($this->yes) {
+            return $default;
+        }
+        throw $this->needs($label);
+    }
+
     public function search(string $label, Closure $options, string $placeholder = '', string $hint = ''): int|string
     {
         throw $this->needs($label);

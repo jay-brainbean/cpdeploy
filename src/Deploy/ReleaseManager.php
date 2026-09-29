@@ -35,6 +35,9 @@ final class ReleaseManager
     {
         $dir = $this->paths->releasesDir($site);
         $out = [];
+        if (!is_dir($dir)) {
+            return []; // never deployed
+        }
         foreach (scandir($dir) ?: [] as $entry) {
             if ($entry === '.' || $entry === '..' || str_contains($entry, '.cpd-tmp-')) {
                 continue;

@@ -144,6 +144,100 @@ final class EnvFile
         return $out;
     }
 
+    /**
+     * Keys in file order (first definitions only).
+     *
+     * @return list<string>
+     */
+    public function keys(): array
+    {
+        return array_keys($this->all());
+    }
+
+    /**
+     * ENV-03: a copy with KEY set to $value, quoted by ENV-04.
+     *  1. an active line → its value is replaced (an `export ` prefix is kept);
+     *  2. else a commented assignment `# KEY=…` becomes the active line;
+     *  3. else it goes after the last key with the same prefix (before the first
+     *     `_`), or at the end.
+     */
+    public function set(string $key, string $value): self
+    {
+        if (preg_match(self::KEY_PATTERN, $key) !== 1) {
+            throw new CpdeployException(ErrorCode::USAGE, "{$key} isn't a valid .env key", 'Keys use letters, digits, _ and ., and do not start with a digit.');
+        }
+        $line = $key . '=' . self::quote($key, $value);
+        $entries = $this->entries;
+
+        foreach ($entries as $i => $entry) {
+            if ($entry['key'] === $key) {
+                $export = preg_match('/^\s*export\s+/', $entry['text']) === 1 ? 'export ' : '';
+                $entries[$i] = ['key' => $key, 'value' => $value, 'text' => $export . $line, 'line' => $entry['line']];
+
+                return new self($entries, $this->warnings);
+            }
+        }
+        foreach ($entries as $i => $entry) {
+            if ($entry['key'] === null && preg_match('/^\s*#\s*(?:export\s+)?' . preg_quote($key, '/') . '\s*=/', $entry['text']) === 1) {
+                $entries[$i] = ['key' => $key, 'value' => $value, 'text' => $line, 'line' => $entry['line']];
+
+                return new self($entries, $this->warnings);
+            }
+        }
+
+        $new = ['key' => $key, 'value' => $value, 'text' => $line, 'line' => 0];
+        $prefix = explode('_', $key)[0];
+        $after = null;
+        foreach ($entries as $i => $entry) {
+            if ($entry['key'] !== null && explode('_', $entry['key'])[0] === $prefix) {
+                $after = $i;
+            }
+        }
+        if ($after === null) {
+            // At the end, before the empty line a trailing newline leaves.
+            $after = count($entries) - 1;
+            while ($after >= 0 && $entries[$after]['key'] === null && trim($entries[$after]['text']) === '') {
+                $after--;
+            }
+        }
+        array_splice($entries, $after + 1, 0, [$new]);
+
+        return new self($entries, $this->warnings);
+    }
+
+    /**
+     * A copy without any active line for KEY (commented lines stay).
+     */
+    public function unset(string $key): self
+    {
+        return new self(array_values(array_filter($this->entries, static fn (array $e): bool => $e['key'] !== $key)), $this->warnings);
+    }
+
+    /**
+     * ENV-04: unquoted when safe; single quotes when there is a `$` (no ${VAR}
+     * interpolation); else double quotes with escapes. `$` together with `'`
+     * can't be written safely and is refused.
+     */
+    public static function quote(string $key, string $value): string
+    {
+        if (preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $value) === 1) {
+            return $value;
+        }
+        if (str_contains($value, '$')) {
+            if (str_contains($value, "'")) {
+                throw new CpdeployException(
+                    ErrorCode::USAGE,
+                    "The value of {$key} contains both \$ and ': it can't be written without \$ being expanded",
+                    'Change the value, or edit .env by hand (cpdeploy env <site> edit).',
+                );
+            }
+
+            return "'" . $value . "'";
+        }
+
+        return '"' . str_replace(['\\', '"', "\n", "\r"], ['\\\\', '\\"', '\\n', '\\r'], $value) . '"';
+    }
+
     public function toString(): string
     {
         return implode("\n", array_map(static fn (array $e): string => $e['text'], $this->entries));
