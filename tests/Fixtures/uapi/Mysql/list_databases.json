@@ -1,0 +1,45 @@
+{
+    "apiversion": 3,
+    "module": "Mysql",
+    "func": "list_databases",
+    "result": {
+        "metadata": {
+            "transformed": 1
+        },
+        "status": 1,
+        "messages": null,
+        "warnings": null,
+        "data": [
+            {
+                "users": [
+                    "cpuser_db1"
+                ],
+                "disk_usage": 5029888,
+                "database": "cpuser_db1"
+            },
+            {
+                "users": [
+                    "cpuser_db2"
+                ],
+                "database": "cpuser_db2",
+                "disk_usage": 40517632
+            },
+            {
+                "users": [
+                    "cpuser_db3",
+                    "cpuser_db4"
+                ],
+                "disk_usage": 123387904,
+                "database": "cpuser_db3"
+            },
+            {
+                "database": "cpuser_db5",
+                "disk_usage": 1949696,
+                "users": [
+                    "cpuser_db5"
+                ]
+            }
+        ],
+        "errors": null
+    }
+}

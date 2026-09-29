@@ -55,11 +55,12 @@ final class CheckCommand extends Command
             }
         }
         $output->writeln('');
+        $plural = static fn (int $n, string $word): string => $n . ' ' . $word . ($n === 1 ? '' : 's');
         $output->writeln(sprintf(
-            '%d ok, %d warnings, %d problems',
+            '%d ok, %s, %s',
             $counts[CheckResult::OK],
-            $counts[CheckResult::WARN],
-            $counts[CheckResult::FAIL],
+            $plural($counts[CheckResult::WARN], 'warning'),
+            $plural($counts[CheckResult::FAIL], 'problem'),
         ));
 
         return $failed ? 3 : 0;

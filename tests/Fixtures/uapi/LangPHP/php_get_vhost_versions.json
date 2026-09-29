@@ -1,0 +1,142 @@
+{
+    "apiversion": 3,
+    "module": "LangPHP",
+    "func": "php_get_vhost_versions",
+    "result": {
+        "warnings": null,
+        "data": [
+            {
+                "version": "ea-php80",
+                "account_owner": "root",
+                "main_domain": 0,
+                "homedir": "/home/cpuser",
+                "phpversion_source": {
+                    "domain": "site21.example.test"
+                },
+                "documentroot": "/home/cpuser/public_html/site21.example.test/public",
+                "php_fpm": 1,
+                "vhost": "site21.example.test",
+                "account": "cpuser",
+                "php_fpm_pool_parms": {
+                    "pm_process_idle_timeout": 10,
+                    "pm_max_children": 5,
+                    "pm_max_requests": 20
+                }
+            },
+            {
+                "vhost": "site36.example.test",
+                "account": "cpuser",
+                "php_fpm": 1,
+                "documentroot": "/home/cpuser/public_html/site36.example.test",
+                "version": "ea-php81",
+                "account_owner": "root",
+                "main_domain": 0,
+                "phpversion_source": {
+                    "domain": "site36.example.test"
+                },
+                "homedir": "/home/cpuser",
+                "php_fpm_pool_parms": {
+                    "pm_process_idle_timeout": 10,
+                    "pm_max_children": 5,
+                    "pm_max_requests": 20
+                }
+            },
+            {
+                "php_fpm_pool_parms": {
+                    "pm_max_requests": 20,
+                    "pm_process_idle_timeout": 10,
+                    "pm_max_children": 5
+                },
+                "account": "cpuser",
+                "vhost": "site22.example.test",
+                "php_fpm": 1,
+                "documentroot": "/home/cpuser/public_html/site22.example.test",
+                "phpversion_source": {
+                    "domain": "site22.example.test"
+                },
+                "homedir": "/home/cpuser",
+                "version": "ea-php81",
+                "account_owner": "root",
+                "main_domain": 0
+            },
+            {
+                "php_fpm_pool_parms": {
+                    "pm_max_children": 5,
+                    "pm_process_idle_timeout": 10,
+                    "pm_max_requests": 20
+                },
+                "documentroot": "/home/cpuser/public_html/site41.example.test/public",
+                "version": "ea-php74",
+                "account_owner": "root",
+                "main_domain": 0,
+                "phpversion_source": {
+                    "domain": "site41.example.test"
+                },
+                "homedir": "/home/cpuser",
+                "account": "cpuser",
+                "vhost": "site41.example.test",
+                "php_fpm": 1
+            },
+            {
+                "vhost": "site52.example.test",
+                "account": "cpuser",
+                "php_fpm": 1,
+                "documentroot": "/home/cpuser/public_html",
+                "phpversion_source": {
+                    "domain": "site52.example.test"
+                },
+                "homedir": "/home/cpuser",
+                "account_owner": "root",
+                "version": "ea-php81",
+                "main_domain": 1,
+                "php_fpm_pool_parms": {
+                    "pm_max_requests": 20,
+                    "pm_max_children": 5,
+                    "pm_process_idle_timeout": 10
+                }
+            },
+            {
+                "documentroot": "/home/cpuser/public_html/site16.example.test/public",
+                "phpversion_source": {
+                    "domain": "site16.example.test"
+                },
+                "homedir": "/home/cpuser",
+                "account_owner": "root",
+                "version": "ea-php82",
+                "main_domain": 0,
+                "account": "cpuser",
+                "vhost": "site16.example.test",
+                "php_fpm": 1,
+                "php_fpm_pool_parms": {
+                    "pm_max_children": 5,
+                    "pm_process_idle_timeout": 10,
+                    "pm_max_requests": 20
+                }
+            },
+            {
+                "php_fpm_pool_parms": {
+                    "pm_max_requests": 20,
+                    "pm_max_children": 5,
+                    "pm_process_idle_timeout": 10
+                },
+                "php_fpm": 1,
+                "account": "cpuser",
+                "vhost": "site51.example.test",
+                "homedir": "/home/cpuser",
+                "phpversion_source": {
+                    "domain": "site51.example.test"
+                },
+                "account_owner": "root",
+                "version": "ea-php82",
+                "main_domain": 0,
+                "documentroot": "/home/cpuser/public_html/site51.example.test"
+            }
+        ],
+        "errors": null,
+        "metadata": {
+            "transformed": 1
+        },
+        "status": 1,
+        "messages": null
+    }
+}

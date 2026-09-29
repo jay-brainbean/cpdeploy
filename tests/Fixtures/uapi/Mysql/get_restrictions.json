@@ -1,0 +1,17 @@
+{
+    "apiversion": 3,
+    "module": "Mysql",
+    "func": "get_restrictions",
+    "result": {
+        "metadata": [],
+        "status": 1,
+        "messages": null,
+        "warnings": null,
+        "data": {
+            "max_username_length": 32,
+            "prefix": "cpuser_",
+            "max_database_name_length": 64
+        },
+        "errors": null
+    }
+}

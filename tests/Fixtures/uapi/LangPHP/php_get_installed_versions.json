@@ -1,0 +1,21 @@
+{
+    "apiversion": 3,
+    "module": "LangPHP",
+    "func": "php_get_installed_versions",
+    "result": {
+        "metadata": [],
+        "status": 1,
+        "messages": null,
+        "warnings": null,
+        "data": {
+            "versions": [
+                "ea-php74",
+                "ea-php80",
+                "ea-php81",
+                "ea-php82",
+                "ea-php83"
+            ]
+        },
+        "errors": null
+    }
+}
