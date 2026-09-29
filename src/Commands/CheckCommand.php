@@ -7,6 +7,8 @@ namespace Cpdeploy\Commands;
 use Cpdeploy\Check\CheckGroup;
 use Cpdeploy\Check\CheckResult;
 use Cpdeploy\Services;
+use Cpdeploy\Support\Masker;
+use Cpdeploy\Ui\Theme;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -37,20 +39,36 @@ final class CheckCommand extends Command
             return $failed ? 3 : 0;
         }
 
-        $theme = $this->services->theme();
-        $masker = $this->services->masker();
         $output->writeln('<options=bold>cpdeploy · Server check</>');
+        self::render($groups, $output, $this->services->theme(), $this->services->masker());
+
+        return $failed ? 3 : 0;
+    }
+
+    /**
+     * The §9.7 listing; $problemsOnly shows only ⚠ and ✗ lines (UIG-02).
+     *
+     * @param list<CheckGroup> $groups
+     */
+    public static function render(array $groups, OutputInterface $output, Theme $theme, Masker $masker, bool $problemsOnly = false): void
+    {
         $counts = [CheckResult::OK => 0, CheckResult::WARN => 0, CheckResult::FAIL => 0];
         foreach ($groups as $group) {
-            $output->writeln('');
-            $output->writeln('<options=bold>' . $group->name . '</>');
+            $shown = array_filter($group->checks, static fn (CheckResult $c): bool => !$problemsOnly || in_array($c->status, [CheckResult::WARN, CheckResult::FAIL], true));
             foreach ($group->checks as $check) {
                 if (isset($counts[$check->status])) {
                     $counts[$check->status]++;
                 }
-                $output->writeln(sprintf('  %s %s', $theme->status($check->status), $this->escape($masker->mask($check->message))));
+            }
+            if ($shown === []) {
+                continue;
+            }
+            $output->writeln('');
+            $output->writeln('<options=bold>' . $group->name . '</>');
+            foreach ($shown as $check) {
+                $output->writeln(sprintf('  %s %s', $theme->status($check->status), self::escape($masker->mask($check->message))));
                 if ($check->hint !== '' && $check->status !== CheckResult::OK) {
-                    $output->writeln(sprintf('      <fg=gray>%s %s</>', $theme->symbol('arrow'), $this->escape($check->hint)));
+                    $output->writeln(sprintf('      <fg=gray>%s %s</>', $theme->symbol('arrow'), self::escape($check->hint)));
                 }
             }
         }
@@ -62,11 +80,9 @@ final class CheckCommand extends Command
             $plural($counts[CheckResult::WARN], 'warning'),
             $plural($counts[CheckResult::FAIL], 'problem'),
         ));
-
-        return $failed ? 3 : 0;
     }
 
-    private function escape(string $text): string
+    private static function escape(string $text): string
     {
         return str_replace('<', '\\<', $text);
     }

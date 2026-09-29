@@ -17,6 +17,13 @@ interface Asker
     public function select(string $label, array $options, int|string|null $default = null, string $hint = ''): int|string;
 
     /**
+     * @param array<int|string, string> $options value => label
+     * @param list<int|string>           $default values selected at first
+     * @return list<int|string> the selected values
+     */
+    public function multiselect(string $label, array $options, array $default = [], string $hint = ''): array;
+
+    /**
      * @param Closure(string): array<int|string, string> $options search text → value => label
      */
     public function search(string $label, Closure $options, string $placeholder = '', string $hint = ''): int|string;

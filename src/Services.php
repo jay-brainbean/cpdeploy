@@ -10,6 +10,7 @@ use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Paths;
 use Cpdeploy\Config\Presets;
 use Cpdeploy\Config\SiteRegistry;
+use Cpdeploy\Config\SiteSettings;
 use Cpdeploy\Cpanel\CloudLinux;
 use Cpdeploy\Cpanel\DomainService;
 use Cpdeploy\Cpanel\MultiPhpService;
@@ -23,12 +24,15 @@ use Cpdeploy\Deploy\Deployer;
 use Cpdeploy\Deploy\Finisher;
 use Cpdeploy\Deploy\GoLive;
 use Cpdeploy\Deploy\HealthChecker;
+use Cpdeploy\Deploy\History;
 use Cpdeploy\Deploy\PlanBuilder;
 use Cpdeploy\Deploy\Preflight;
 use Cpdeploy\Deploy\Recovery;
+use Cpdeploy\Deploy\ReleaseActions;
 use Cpdeploy\Deploy\ReleaseManager;
 use Cpdeploy\Deploy\ReleaseManifest;
 use Cpdeploy\Deploy\Rollback;
+use Cpdeploy\Deploy\SiteInfo;
 use Cpdeploy\Deploy\SiteStatus;
 use Cpdeploy\Deploy\StepRunner;
 use Cpdeploy\Deploy\Steps\ComposerStep;
@@ -41,24 +45,30 @@ use Cpdeploy\Deploy\Steps\QueueRestartStep;
 use Cpdeploy\Deploy\Steps\SeedStep;
 use Cpdeploy\Deploy\Steps\StorageLinkStep;
 use Cpdeploy\Docroot\DocrootManager;
+use Cpdeploy\Env\EnvManager;
 use Cpdeploy\Git\DeployKeyService;
 use Cpdeploy\Git\GitRepository;
 use Cpdeploy\Git\HostKeys;
+use Cpdeploy\Git\MirrorService;
+use Cpdeploy\Git\SiteKeys;
 use Cpdeploy\Git\Transport;
 use Cpdeploy\GitHub\GitHubApi;
 use Cpdeploy\GitHub\TokenService;
 use Cpdeploy\GitHub\TokenStore;
 use Cpdeploy\Laravel\Artisan;
+use Cpdeploy\Laravel\LaravelTools;
 use Cpdeploy\Laravel\Maintenance;
 use Cpdeploy\Laravel\MigrationStatus;
 use Cpdeploy\Project\ComposerInspector;
 use Cpdeploy\Project\NodeInspector;
 use Cpdeploy\Project\ProjectDetector;
+use Cpdeploy\Runtime\ComposerAuth;
 use Cpdeploy\Runtime\ComposerInstaller;
 use Cpdeploy\Runtime\NodeInstaller;
 use Cpdeploy\Runtime\NodeLocator;
 use Cpdeploy\Runtime\NodeResolver;
 use Cpdeploy\Runtime\PackageManager;
+use Cpdeploy\Runtime\PhpChange;
 use Cpdeploy\Runtime\PhpLocator;
 use Cpdeploy\Runtime\PhpService;
 use Cpdeploy\Support\Clock;
@@ -71,6 +81,7 @@ use Cpdeploy\Support\Signals;
 use Cpdeploy\Support\SystemInfo;
 use Cpdeploy\Support\TcpProbe;
 use Cpdeploy\Ui\Asker;
+use Cpdeploy\Ui\Editor;
 use Cpdeploy\Ui\NonInteractiveAsker;
 use Cpdeploy\Ui\Pager;
 use Cpdeploy\Ui\PlainReporter;
@@ -106,8 +117,21 @@ final class Services
     private ?Presets $presets = null;
     private ?SiteRegistry $sites = null;
 
+    /** UIG-02: ~/cpdeploy was created by this run. */
+    private bool $firstRun = false;
+
     public function __construct(private readonly Environment $environment)
     {
+    }
+
+    public function markFirstRun(): void
+    {
+        $this->firstRun = true;
+    }
+
+    public function firstRun(): bool
+    {
+        return $this->firstRun;
     }
 
     public function environment(): Environment
@@ -410,7 +434,7 @@ final class Services
 
     public function preflight(): Preflight
     {
-        return new Preflight($this->paths(), $this->fs(), $this->masker(), $this->docroots(), $this->composerInspector(), $this->quota(), $this->dbCheck(), $this->git(), new ReleaseManifest($this->fs()));
+        return new Preflight($this->paths(), $this->fs(), $this->masker(), $this->docroots(), $this->composerInspector(), $this->quota(), $this->dbCheck(), $this->git(), new ReleaseManifest($this->fs()), $this->envManager());
     }
 
     public function deployer(): Deployer
@@ -478,6 +502,112 @@ final class Services
             $this->recovery(),
             $this->rollbackService(),
         );
+    }
+
+    public function envManager(): EnvManager
+    {
+        return new EnvManager(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->masker(),
+            $this->system(),
+            $this->config(),
+            $this->sites(),
+            $this->releases(),
+            $this->artisan(),
+            $this->php(),
+            $this->finisher(),
+        );
+    }
+
+    public function laravelTools(): LaravelTools
+    {
+        return new LaravelTools(
+            $this->paths(),
+            $this->clock(),
+            $this->system(),
+            $this->config(),
+            $this->sites(),
+            $this->releases(),
+            $this->php(),
+            $this->artisan(),
+            $this->maintenance(),
+            $this->migrations(),
+            $this->shell(),
+        );
+    }
+
+    public function phpChange(): PhpChange
+    {
+        return new PhpChange(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->system(),
+            $this->sites(),
+            $this->releases(),
+            $this->domains(),
+            $this->php(),
+            $this->phpLocator(),
+            $this->multiPhp(),
+            $this->docroots(),
+            $this->composerInstaller(),
+            $this->composerInspector(),
+            $this->projects(),
+            $this->git(),
+            $this->healthChecker(),
+            $this->finisher(),
+        );
+    }
+
+    public function siteSettings(): SiteSettings
+    {
+        return new SiteSettings($this->paths(), $this->clock(), $this->system(), $this->sites(), $this->releases(), $this->finisher());
+    }
+
+    public function mirrors(): MirrorService
+    {
+        return new MirrorService($this->paths(), $this->sites(), $this->git(), $this->transport());
+    }
+
+    public function siteKeys(): SiteKeys
+    {
+        return new SiteKeys(
+            $this->paths(),
+            $this->clock(),
+            $this->system(),
+            $this->sites(),
+            $this->deployKeys(),
+            fn (): GitHubApi => $this->github(),
+            $this->finisher(),
+            $this->releases(),
+        );
+    }
+
+    public function composerAuth(): ComposerAuth
+    {
+        return new ComposerAuth($this->paths(), $this->fs(), $this->clock(), $this->system(), $this->sites());
+    }
+
+    public function releaseActions(): ReleaseActions
+    {
+        return new ReleaseActions($this->paths(), $this->fs(), $this->clock(), $this->system(), $this->releases());
+    }
+
+    public function history(): History
+    {
+        return new History($this->paths(), $this->sites());
+    }
+
+    public function siteInfo(): SiteInfo
+    {
+        return new SiteInfo($this->paths(), $this->fs(), $this->sites(), $this->releases(), $this->docroots(), $this->phpChange(), $this->deployKeys());
+    }
+
+    public function editor(): Editor
+    {
+        return new Editor($this->shell(), $this->fs(), $this->config(), $this->environment);
     }
 
     public function finisher(): Finisher

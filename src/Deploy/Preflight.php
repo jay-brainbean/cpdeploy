@@ -12,6 +12,7 @@ use Cpdeploy\Database\DbCheckResult;
 use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Docroot\HandlerBlock;
 use Cpdeploy\Env\EnvFile;
+use Cpdeploy\Env\EnvManager;
 use Cpdeploy\Git\GitRepository;
 use Cpdeploy\Laravel\AppKey;
 use Cpdeploy\Laravel\Maintenance;
@@ -49,6 +50,7 @@ final class Preflight
         private readonly DbCheck $db,
         private readonly GitRepository $git,
         private readonly ReleaseManifest $manifest,
+        private readonly EnvManager $env,
     ) {
     }
 
@@ -122,8 +124,8 @@ final class Preflight
                     }
                     $ok[] = '.env';
                     if ($site->isLaravel()) {
-                        if (!AppKey::isSet($env->get('APP_KEY'))) {
-                            $blocks[] = new CpdeployException(ErrorCode::APP_KEY, 'APP_KEY is empty in .env', 'Generate one: Manage site → Environment → Generate APP_KEY.');
+                        if (!AppKey::isSet($env->get('APP_KEY')) && !$this->generateAppKey($ctx)) {
+                            $blocks[] = new CpdeployException(ErrorCode::APP_KEY, 'APP_KEY is empty in .env', 'Deploy from a terminal: it offers to generate one (Generate APP_KEY now).');
                         }
                         if (strtolower((string) $env->get('APP_ENV')) === 'local' || strtolower((string) $env->get('APP_DEBUG')) === 'true') {
                             $ctx->warn('.env has APP_ENV=local or APP_DEBUG=true — not safe for a live site');
@@ -184,6 +186,28 @@ final class Preflight
         // PRE-17 / PRE-18: only once nothing blocks, so the question isn't wasted.
         $this->htaccessDrift($ctx);
         $this->filesDrift($ctx);
+    }
+
+    /**
+     * §9.4 inline fix (S-26): on a terminal, offer to generate the empty APP_KEY
+     * (LAR-06). The key is written with a backup (ENV-06); the deploy continues.
+     */
+    private function generateAppKey(DeployContext $ctx): bool
+    {
+        if (!$ctx->asker->interactive() || $ctx->flags->yes) {
+            return false;
+        }
+        $ctx->reporter->warn('APP_KEY is empty in .env: Laravel refuses to start without it.');
+        if ($ctx->asker->select('APP_KEY is empty', ['generate' => 'Generate APP_KEY now', 'back' => 'Back'], 'generate') !== 'generate') {
+            return false;
+        }
+        $key = AppKey::generate();
+        $backup = $this->env->set($ctx->name(), 'APP_KEY', $key, lockHeld: true);
+        $ctx->env['APP_KEY'] = $key;
+        $ctx->note('.env: APP_KEY generated' . ($backup !== null ? ' (backup: ' . basename($backup) . ')' : ''));
+        $ctx->reporter->info('APP_KEY generated and saved to .env');
+
+        return true;
     }
 
     /**

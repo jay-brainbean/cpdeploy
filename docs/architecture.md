@@ -139,3 +139,28 @@ changes refuse to run): it recovers with `--recover` (deploy), `--yes`
 (exit 11). `recoverLocked()` acts on the recorded phase (§11.9) — every action is
 idempotent, and the statuses are always re-derived from where `current` points —
 then writes its own log and a `recover` history entry (REC-03).
+
+## Menus (`Menus/`)
+
+`cpdeploy` with no command runs `MenuCommand`, which builds a `MenuContext`
+(services, Asker, Reporter, output, theme) and runs `MainMenu`. Each screen is
+a small class that asks, calls a service, and shows the result; errors are
+shown in the §13 format (`Ui/ErrorView`) and the screen returns to its menu
+(UIG-05).
+
+| Screen | Service (shared with the command) |
+|---|---|
+| `MainMenu` | `SiteStatus`, `Recovery`, `ServerCheck`, `History` |
+| `DeployScreen` | `Deployer` (`deploy`), `MirrorService` for *another ref* |
+| `ManageSiteMenu` → Branch, Composer credentials, Site info | `SiteSettings`, `MirrorService`, `ComposerAuth`, `SiteInfo` |
+| `ReleasesMenu` | `ReleaseActions` (`releases`), `Rollback` (`rollback`) |
+| `PhpMenu` | `Runtime/PhpChange` (`php`) |
+| `NodeMenu`, `StepsMenu` | `Config/SiteSettings` (`node`, `config`) |
+| `EnvMenu` | `Env/EnvManager` (`env`), `Ui/Editor` |
+| `LaravelToolsMenu` | `Laravel/LaravelTools` (`artisan`, `down`, `up`) |
+| `KeyMenu` | `Git/SiteKeys` (`key`) |
+| `LogsMenu` | `Deploy/History` (`logs`) |
+
+`Ui/Editor` opens text in `ui.editor` → `$VISUAL` → `$EDITOR` → `nano` → `vi`
+from a private temp copy, validates the result, and offers *Edit again* /
+*Discard* (ENV-07); `config edit`, `env edit` and Composer credentials use it.

@@ -162,6 +162,18 @@ final class GitRepository
     }
 
     /**
+     * Tags, newest first (for *Deploy with changes → Different branch, tag or commit*).
+     *
+     * @return list<string>
+     */
+    public function tags(string $dir): array
+    {
+        $out = $this->local($dir, ['for-each-ref', '--sort=-creatordate', '--format=%(refname:short)', 'refs/tags']);
+
+        return array_values(array_filter(explode("\n", trim($out)), static fn (string $t): bool => $t !== ''));
+    }
+
+    /**
      * GIT-10: a file at a commit, or null when it doesn't exist there.
      */
     public function show(string $dir, string $sha, string $path): ?string

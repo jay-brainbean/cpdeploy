@@ -23,6 +23,10 @@ final class DocrootWeb
                 readfile($path);
                 return true;
             }
+            if ($uri !== '/' && is_file($path) && str_ends_with($path, '.php')) {
+                require $path; // a PHP file that exists runs itself (HTTP-04 probes)
+                return true;
+            }
             $index = $docroot . '/index.php';
             if (is_file($index)) {
                 $real = (string) realpath($index);

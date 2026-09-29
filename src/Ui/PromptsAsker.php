@@ -10,6 +10,7 @@ use Cpdeploy\Support\Errors\ErrorCode;
 use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\confirm;
+use function Laravel\Prompts\multiselect;
 use function Laravel\Prompts\password;
 use function Laravel\Prompts\pause;
 use function Laravel\Prompts\search;
@@ -36,6 +37,13 @@ final class PromptsAsker implements Asker
         $labels = array_map(static fn (string $o): string => Format::truncate($o), $options);
 
         return select(label: Format::truncate($label), options: $labels, default: $default, scroll: 10, hint: $hint);
+    }
+
+    public function multiselect(string $label, array $options, array $default = [], string $hint = ''): array
+    {
+        $labels = array_map(static fn (string $o): string => Format::truncate($o), $options);
+
+        return array_values(multiselect(label: Format::truncate($label), options: $labels, default: $default, scroll: 10, hint: $hint));
     }
 
     public function search(string $label, Closure $options, string $placeholder = '', string $hint = ''): int|string

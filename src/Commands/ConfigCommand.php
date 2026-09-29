@@ -9,7 +9,6 @@ use Cpdeploy\Config\SiteRegistry;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Support\Lock;
-use Cpdeploy\Support\RunOptions;
 use Cpdeploy\Version;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputArgument;
@@ -122,55 +121,41 @@ final class ConfigCommand extends SiteCommand
             throw new CpdeployException(ErrorCode::USAGE, 'config edit needs a terminal', "Use: cpdeploy config {$site} set <key> <value>");
         }
         $registry = $this->services->sites();
-        $paths = $this->services->paths();
-        $fs = $this->services->fs();
-        $asker = $this->services->asker($input);
-        $file = $paths->siteConfig($site);
+        $file = $this->services->paths()->siteConfig($site);
         $lock = $this->lock($site);
-        $tmp = $fs->tempFile('site-yml', SiteRegistry::dump($registry->load($site)));
         try {
-            while (true) {
-                $this->services->shell()->run([...$this->editor(), $tmp], (new RunOptions(timeout: null))->tty());
-                $raw = (string) file_get_contents($tmp);
-                try {
-                    $config = $registry->parse($raw, $file);
-                    if ($config->name() !== $site) {
-                        throw new CpdeployException(ErrorCode::CONFIG_INVALID, "name can't change (it must stay {$site})", '');
-                    }
-                    $registry->save($config);
-                    $output->writeln(sprintf('<fg=green>%s</> site.yml saved', $this->services->theme()->symbol('ok')));
+            $validated = null;
+            $edited = $this->services->editor()->edit(
+                SiteRegistry::dump($registry->load($site)),
+                'site-yml',
+                static function (string $raw) use ($registry, $file, $site, &$validated): ?string {
+                    try {
+                        $config = $registry->parse($raw, $file);
+                        if ($config->name() !== $site) {
+                            return "name can't change (it must stay {$site})";
+                        }
+                        $validated = $config;
 
-                    return 0;
-                } catch (CpdeployException $e) {
-                    $output->writeln(sprintf('<fg=red>%s</> %s', $this->services->theme()->symbol('fail'), $e->getMessage()));
-                    if ($asker->select('The file has problems', ['edit' => 'Edit again', 'discard' => 'Discard my changes'], 'edit') === 'discard') {
-                        $output->writeln('Nothing was changed.');
-
-                        return 0;
+                        return null;
+                    } catch (CpdeployException $e) {
+                        return $e->getMessage();
                     }
-                }
+                },
+                $this->services->asker($input),
+                $this->services->reporter($input, $output),
+            );
+            if ($edited === null || !$validated instanceof SiteConfig) {
+                $output->writeln('Nothing was changed.');
+
+                return 0;
             }
+            $registry->save($validated);
+            $output->writeln(sprintf('<fg=green>%s</> site.yml saved', $this->services->theme()->symbol('ok')));
+
+            return 0;
         } finally {
-            @unlink($tmp);
             $lock->release();
         }
-    }
-
-    /**
-     * ui.editor → $VISUAL → $EDITOR → nano → vi.
-     *
-     * @return list<string>
-     */
-    private function editor(): array
-    {
-        $env = $this->services->environment();
-        foreach ([$this->services->config()->editor(), $env->get('VISUAL'), $env->get('EDITOR')] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return array_values(array_filter(preg_split('/\s+/', trim($candidate)) ?: [], static fn (string $p): bool => $p !== ''));
-            }
-        }
-
-        return [$this->services->shell()->which('nano') !== null ? 'nano' : 'vi'];
     }
 
     private function key(mixed $key, string $site): string

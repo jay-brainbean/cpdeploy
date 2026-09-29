@@ -110,6 +110,15 @@ Interruption tests (`RecoveryTest`) really kill a running deploy: with
 `after_activate` custom command send SIGKILL to the PID recorded there. `runCli()`
 reports a killed process as exit 128 + signal.
 
+## Menu tests (`tests/Scenario/MenuTest.php`)
+
+The menus run in-process: `MainMenu` with a `ScriptedAsker`, a
+`BufferedOutput` and a `PlainReporter`, on the deploy-scenario fixtures. Each
+answer is a `[label fragment, value]` pair, so a question asked out of order
+fails with the screen so far and the questions asked. `less` is a fake that
+copies what it would show to `$CPD_PAGED`, and the editor (`$EDITOR`) is a fake
+that appends `$CPD_EDIT_LINE` to the file.
+
 ## Real Laravel (`tests/RealLaravel`)
 
 The CI job `real-laravel` creates a `laravel/laravel` project and deploys it

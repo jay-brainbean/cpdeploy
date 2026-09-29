@@ -4,13 +4,9 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Commands;
 
-use Cpdeploy\Deploy\Recovery;
-use Cpdeploy\Deploy\StateFile;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
-use Cpdeploy\Support\Lock;
 use Cpdeploy\Ui\Format;
-use Cpdeploy\Version;
 use DateTimeImmutable;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Helper\Table;
@@ -94,21 +90,12 @@ final class ReleasesCommand extends SiteCommand
             }
         }
 
-        $lock = Lock::site($this->services->paths()->siteLock($site), $site, 'releases', $this->services->system()->userName(), Version::get(), $this->services->clock());
-        try {
-            // REC-01: an interrupted operation must be recovered before the releases change.
-            $state = new StateFile($this->services->paths()->stateFile($site), $this->services->fs());
-            if ($state->exists()) {
-                throw Recovery::interrupted($site, $state->read() ?? []);
-            }
-            match ($action) {
-                'protect' => $releases->protect($site, $id, true),
-                'unprotect' => $releases->protect($site, $id, false),
-                default => $releases->delete($site, $id),
-            };
-        } finally {
-            $lock->release();
-        }
+        $actions = $this->services->releaseActions();
+        match ($action) {
+            'protect' => $actions->protect($site, $id, true),
+            'unprotect' => $actions->protect($site, $id, false),
+            default => $actions->delete($site, $id),
+        };
         $output->writeln(sprintf('<fg=green>%s</> %s', $theme->symbol('ok'), match ($action) {
             'protect' => "Release {$id} is protected: cleanup will keep it",
             'unprotect' => "Release {$id} is no longer protected",
