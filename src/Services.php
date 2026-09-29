@@ -8,12 +8,36 @@ use Cpdeploy\Check\ServerCheck;
 use Cpdeploy\Check\ServerCheckServices;
 use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Paths;
+use Cpdeploy\Config\Presets;
+use Cpdeploy\Config\SiteRegistry;
 use Cpdeploy\Cpanel\CloudLinux;
 use Cpdeploy\Cpanel\DomainService;
 use Cpdeploy\Cpanel\MultiPhpService;
 use Cpdeploy\Cpanel\MysqlService;
 use Cpdeploy\Cpanel\QuotaService;
 use Cpdeploy\Cpanel\Uapi;
+use Cpdeploy\Database\DbCheck;
+use Cpdeploy\Deploy\Builder;
+use Cpdeploy\Deploy\ChangeAnalyzer;
+use Cpdeploy\Deploy\Deployer;
+use Cpdeploy\Deploy\Finisher;
+use Cpdeploy\Deploy\GoLive;
+use Cpdeploy\Deploy\HealthChecker;
+use Cpdeploy\Deploy\PlanBuilder;
+use Cpdeploy\Deploy\Preflight;
+use Cpdeploy\Deploy\ReleaseManager;
+use Cpdeploy\Deploy\SiteStatus;
+use Cpdeploy\Deploy\StepRunner;
+use Cpdeploy\Deploy\Steps\ComposerStep;
+use Cpdeploy\Deploy\Steps\DocrootFilesStep;
+use Cpdeploy\Deploy\Steps\ExportStep;
+use Cpdeploy\Deploy\Steps\FrontendBuildStep;
+use Cpdeploy\Deploy\Steps\LinkSharedStep;
+use Cpdeploy\Deploy\Steps\OptimizeStep;
+use Cpdeploy\Deploy\Steps\QueueRestartStep;
+use Cpdeploy\Deploy\Steps\SeedStep;
+use Cpdeploy\Deploy\Steps\StorageLinkStep;
+use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Git\DeployKeyService;
 use Cpdeploy\Git\GitRepository;
 use Cpdeploy\Git\HostKeys;
@@ -21,6 +45,12 @@ use Cpdeploy\Git\Transport;
 use Cpdeploy\GitHub\GitHubApi;
 use Cpdeploy\GitHub\TokenService;
 use Cpdeploy\GitHub\TokenStore;
+use Cpdeploy\Laravel\Artisan;
+use Cpdeploy\Laravel\Maintenance;
+use Cpdeploy\Laravel\MigrationStatus;
+use Cpdeploy\Project\ComposerInspector;
+use Cpdeploy\Project\NodeInspector;
+use Cpdeploy\Project\ProjectDetector;
 use Cpdeploy\Runtime\ComposerInstaller;
 use Cpdeploy\Runtime\NodeInstaller;
 use Cpdeploy\Runtime\NodeLocator;
@@ -69,6 +99,8 @@ final class Services
     private ?MultiPhpService $multiPhp = null;
     private ?PhpLocator $phpLocator = null;
     private ?NodeLocator $nodeLocator = null;
+    private ?Presets $presets = null;
+    private ?SiteRegistry $sites = null;
 
     public function __construct(private readonly Environment $environment)
     {
@@ -112,6 +144,16 @@ final class Services
     public function config(): GlobalConfig
     {
         return $this->config ??= GlobalConfig::load($this->paths()->configFile(), $this->fs());
+    }
+
+    public function presets(): Presets
+    {
+        return $this->presets ??= new Presets();
+    }
+
+    public function sites(): SiteRegistry
+    {
+        return $this->sites ??= new SiteRegistry($this->paths(), $this->fs(), $this->presets());
     }
 
     public function system(): SystemInfo
@@ -291,6 +333,144 @@ final class Services
     public function deployKeys(): DeployKeyService
     {
         return new DeployKeyService($this->shell(), $this->paths(), $this->git(), $this->transport());
+    }
+
+    public function releases(): ReleaseManager
+    {
+        return new ReleaseManager($this->paths(), $this->fs(), $this->clock());
+    }
+
+    public function siteStatus(): SiteStatus
+    {
+        return new SiteStatus($this->paths(), $this->fs(), $this->sites(), $this->releases());
+    }
+
+    public function docroots(): DocrootManager
+    {
+        return new DocrootManager($this->paths(), $this->fs(), $this->sites());
+    }
+
+    public function changes(): ChangeAnalyzer
+    {
+        return new ChangeAnalyzer($this->git());
+    }
+
+    public function projects(): ProjectDetector
+    {
+        return new ProjectDetector();
+    }
+
+    public function composerInspector(): ComposerInspector
+    {
+        return new ComposerInspector($this->shell(), $this->fs(), $this->php());
+    }
+
+    public function nodeInspector(): NodeInspector
+    {
+        return new NodeInspector();
+    }
+
+    public function artisan(): Artisan
+    {
+        return new Artisan($this->shell());
+    }
+
+    public function migrations(): MigrationStatus
+    {
+        return new MigrationStatus($this->artisan());
+    }
+
+    public function maintenance(): Maintenance
+    {
+        return new Maintenance($this->artisan());
+    }
+
+    public function dbCheck(): DbCheck
+    {
+        return new DbCheck($this->shell());
+    }
+
+    /**
+     * CPDEPLOY_HTTP_OVERRIDE=<host>:<port> (test mode only) sends health and marker
+     * requests there over plain HTTP; CPDEPLOY_HTTP_NO_BACKOFF=1 skips the waits.
+     */
+    public function healthChecker(): HealthChecker
+    {
+        $noWait = $this->environment->testing('CPDEPLOY_HTTP_NO_BACKOFF') === '1'
+            ? static function (int $seconds): void {
+            }
+        : null;
+
+        return new HealthChecker($this->http(), $this->environment->testing('CPDEPLOY_HTTP_OVERRIDE'), $noWait);
+    }
+
+    public function preflight(): Preflight
+    {
+        return new Preflight($this->paths(), $this->fs(), $this->masker(), $this->docroots(), $this->composerInspector(), $this->quota(), $this->dbCheck());
+    }
+
+    public function deployer(): Deployer
+    {
+        $runner = new StepRunner($this->signals());
+        $builder = new Builder(
+            $runner,
+            new ExportStep($this->releases(), $this->git(), $this->fs(), $this->clock()),
+            new LinkSharedStep($this->paths(), $this->fs()),
+            new DocrootFilesStep($this->paths(), $this->fs(), $this->docroots()),
+            new ComposerStep($this->shell(), $this->fs(), $this->paths(), $this->masker()),
+            new FrontendBuildStep($this->shell(), $this->fs(), $this->packageManager()),
+            new StorageLinkStep($this->artisan(), $this->shell()),
+            new OptimizeStep($this->artisan(), $this->shell()),
+            $this->migrations(),
+            $this->shell(),
+            $this->fs(),
+        );
+        $goLive = new GoLive(
+            $this->shell(),
+            $this->fs(),
+            $this->signals(),
+            $this->clock(),
+            $this->maintenance(),
+            $this->migrations(),
+            $this->multiPhp(),
+            $this->docroots(),
+            $this->sites(),
+            $this->releases(),
+            $this->php(),
+            $runner,
+            new SeedStep($this->artisan(), $this->shell()),
+            new QueueRestartStep($this->artisan(), $this->shell()),
+            $this->healthChecker(),
+        );
+
+        return new Deployer(
+            $this->paths(),
+            $this->fs(),
+            $this->shell(),
+            $this->clock(),
+            $this->config(),
+            $this->system(),
+            $this->sites(),
+            $this->domains(),
+            $this->git(),
+            $this->transport(),
+            $this->tokens(),
+            $this->releases(),
+            $this->changes(),
+            $this->projects(),
+            $this->nodeInspector(),
+            $this->php(),
+            $this->composerInstaller(),
+            $this->nodeResolver(),
+            $this->nodeInstaller(),
+            $this->migrations(),
+            $this->preflight(),
+            new PlanBuilder(),
+            $builder,
+            $goLive,
+            new Finisher($this->releases(), $this->paths(), $this->fs(), $this->masker(), $this->clock()),
+            $this->masker(),
+        );
     }
 
     public function serverCheck(): ServerCheck

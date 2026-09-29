@@ -18,6 +18,9 @@ final class Masker
     /** ENV-05: .env keys whose values are secret. */
     public const SECRET_KEY_PATTERN = '/(PASS|PASSWORD|SECRET|TOKEN|KEY|PRIVATE|CREDENTIAL|AUTH|DSN)/i';
 
+    /** .env values that are placeholders, not secrets. */
+    public const PLACEHOLDERS = ['null', 'true', 'false', 'none', 'empty', '(null)'];
+
     /** @var array<string, true> */
     private array $secrets = [];
 
@@ -47,7 +50,9 @@ final class Masker
     public function addEnv(array $env): void
     {
         foreach ($env as $key => $value) {
-            if (self::isSecretKey($key)) {
+            // Placeholders such as REDIS_PASSWORD=null (Laravel's .env.example) aren't
+            // secrets; masking them would hide those words everywhere in the logs.
+            if (self::isSecretKey($key) && !in_array(strtolower(trim($value)), self::PLACEHOLDERS, true)) {
                 $this->add($value);
             }
         }

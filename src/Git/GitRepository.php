@@ -172,6 +172,70 @@ final class GitRepository
     }
 
     /**
+     * Whether a file or folder exists at a commit (`git cat-file -e`).
+     */
+    public function exists(string $dir, string $sha, string $path): bool
+    {
+        $result = $this->shell->run(['git', '-C', $dir, 'cat-file', '-e', $sha . ':' . ltrim($path, '/')], new RunOptions(timeout: 30, label: 'git cat-file'));
+
+        return $result->successful();
+    }
+
+    /**
+     * Paths at a commit under $path ("" = the root), relative to the repository root.
+     * Not recursive unless $recursive.
+     *
+     * @return list<string>
+     */
+    public function listFiles(string $dir, string $sha, string $path = '', bool $recursive = false): array
+    {
+        $args = ['ls-tree', '--name-only'];
+        if ($recursive) {
+            $args[] = '-r';
+        }
+        $args[] = $sha;
+        $path = trim($path, '/');
+        if ($path !== '') {
+            $args[] = '--';
+            $args[] = $path . '/';
+        }
+        $out = $this->local($dir, $args);
+
+        return array_values(array_filter(explode("\n", $out), static fn (string $l): bool => $l !== ''));
+    }
+
+    /**
+     * `git diff --name-status --no-renames`: a rename is a delete plus an add.
+     *
+     * @return list<array{0: string, 1: string}> [A|M|D|T, path]
+     */
+    public function changedFiles(string $dir, string $from, string $to, string ...$paths): array
+    {
+        $args = ['diff', '--name-status', '--no-renames', $from, $to];
+        if ($paths !== []) {
+            $args[] = '--';
+            array_push($args, ...array_values($paths));
+        }
+        $out = $this->local($dir, $args);
+        $rows = [];
+        foreach (explode("\n", trim($out)) as $line) {
+            if (preg_match('/^([A-Z])\d*\t(.+)$/', $line, $m) === 1) {
+                $rows[] = [$m[1], $m[2]];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Number of commits in a range, e.g. "a..b" (`git rev-list --count`).
+     */
+    public function count(string $dir, string $range): int
+    {
+        return (int) trim($this->local($dir, ['rev-list', '--count', $range]));
+    }
+
+    /**
      * GIT-11: one commit's details.
      */
     public function commit(string $dir, string $sha): Commit

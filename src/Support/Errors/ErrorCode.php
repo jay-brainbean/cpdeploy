@@ -22,6 +22,7 @@ enum ErrorCode: string
     case GIT = 'E_GIT';
     case REF_NOT_FOUND = 'E_REF_NOT_FOUND';
     case BRANCH_GONE = 'E_BRANCH_GONE';
+    case REWIND = 'E_REWIND';
     case SUBMODULES = 'E_SUBMODULES';
     case LFS = 'E_LFS';
     case EXPORT = 'E_EXPORT';

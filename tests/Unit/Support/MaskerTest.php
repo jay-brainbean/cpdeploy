@@ -64,6 +64,17 @@ final class MaskerTest extends TestCase
         self::assertSame('serving the web', $masker->mask('serving the web'));
     }
 
+    /**
+     * @covers-req LOG-04
+     */
+    public function testPlaceholderValuesAreNotSecrets(): void
+    {
+        $masker = new Masker();
+        $masker->addEnv(['REDIS_PASSWORD' => 'null', 'MAIL_PASSWORD' => 'NULL', 'DB_PASSWORD' => 'real-secret-1']);
+
+        self::assertSame('$user ?? null · ••••', $masker->mask('$user ?? null · real-secret-1'));
+    }
+
     public function testSecretKeyPatternMatchesEnv05(): void
     {
         foreach (['DB_PASSWORD', 'APP_KEY', 'AWS_SECRET_ACCESS_KEY', 'STRIPE_TOKEN', 'SENTRY_DSN', 'PRIVATE_THING', 'SOME_CREDENTIALS', 'OAUTH_ID', 'db_pass'] as $key) {

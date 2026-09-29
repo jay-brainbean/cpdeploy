@@ -1,0 +1,21 @@
+# Static / SPA preset (plan §8.4, Appendix A.1). Merged under the values in site.yml.
+domain:
+  web_dir: dist
+php:
+  sync_multiphp: false
+steps:
+  composer_install: off
+  frontend_build: every
+  storage_link: off
+  optimize: off
+  migrate: off
+  maintenance: off
+  seed: off
+  queue_restart: off
+node:
+  build_outputs: []
+shared:
+  files: []
+  dirs: []
+  docroot_files: []
+  docroot_dirs: [.well-known]

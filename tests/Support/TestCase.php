@@ -83,7 +83,10 @@ abstract class TestCase extends BaseTestCase
      * A fake `uapi` (§16.2). It answers from, in order:
      *   <tmp>/uapi/<Module>/<function>.(txt|json)   per-test overrides (txt = raw output)
      *   tests/Fixtures/uapi/<Module>/<function>.json captured from a real server
-     * Every call is appended to <tmp>/uapi-calls.jsonl with its arguments decoded.
+     * Every call is appended to <tmp>/uapi-calls.jsonl with its arguments decoded
+     * (and, when CPD_WATCH_LINK names a symlink, where it pointed at that moment).
+     * php_set_vhost_versions is remembered in <tmp>/multiphp.json and shows up in
+     * later php_get_vhost_versions answers.
      * Calls listed in <tmp>/uapi-fail ("Module::function" per line) return status 0.
      */
     protected function fakeUapi(): string
@@ -101,16 +104,41 @@ abstract class TestCase extends BaseTestCase
                 $params[$k] = rawurldecode($v);
             }
             $state = getenv('CPD_UAPI_STATE');
-            file_put_contents("{$state}/uapi-calls.jsonl", json_encode(['call' => "{$module}::{$function}", 'args' => $params]) . "\n", FILE_APPEND);
+            $watch = getenv('CPD_WATCH_LINK');
+            $record = ['call' => "{$module}::{$function}", 'args' => $params];
+            if ($watch !== false && $watch !== '') {
+                $record['link'] = is_link($watch) ? readlink($watch) : null;
+            }
+            file_put_contents("{$state}/uapi-calls.jsonl", json_encode($record) . "\n", FILE_APPEND);
+            $multiphp = "{$state}/multiphp.json";
             $fail = is_file("{$state}/uapi-fail") ? array_map('trim', file("{$state}/uapi-fail")) : [];
             if (in_array("{$module}::{$function}", $fail, true)) {
                 fwrite(STDERR, "[fake] warn [uapi] refused\n");
                 echo json_encode(['result' => ['status' => 0, 'errors' => ["Fake failure of {$module}::{$function}"], 'data' => null]]);
                 exit(0);
             }
+            if ("{$module}::{$function}" === 'LangPHP::php_set_vhost_versions') {
+                // MultiPHP is stateful: later php_get_vhost_versions calls see the new version.
+                $over = is_file($multiphp) ? json_decode(file_get_contents($multiphp), true) : [];
+                $over[$params['vhost'] ?? ''] = $params['version'] ?? '';
+                file_put_contents($multiphp, json_encode($over));
+            }
             foreach (["{$state}/uapi/{$module}/{$function}.txt", "{$state}/uapi/{$module}/{$function}.json", getenv('CPDEPLOY_FIXTURES') . "/uapi/{$module}/{$function}.json"] as $file) {
                 if (is_file($file)) {
-                    echo file_get_contents($file);
+                    $out = file_get_contents($file);
+                    if ("{$module}::{$function}" === 'LangPHP::php_get_vhost_versions' && is_file($multiphp)) {
+                        $over = json_decode(file_get_contents($multiphp), true);
+                        $doc = json_decode($out, true);
+                        foreach ($doc['result']['data'] as &$row) {
+                            if (isset($over[$row['vhost']])) {
+                                $row['version'] = $over[$row['vhost']];
+                                $row['phpversion_source'] = ['domain' => $row['vhost']];
+                            }
+                        }
+                        unset($row);
+                        $out = json_encode($doc);
+                    }
+                    echo $out;
                     exit(0);
                 }
             }
@@ -141,7 +169,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * @return list<array{call: string, args: array<string, string>}>
+     * @return list<array{call: string, args: array<string, string>, link?: ?string}>
      */
     protected function uapiCalls(): array
     {
@@ -153,7 +181,7 @@ abstract class TestCase extends BaseTestCase
         foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
             $call = json_decode($line, true);
             if (is_array($call)) {
-                /** @var array{call: string, args: array<string, string>} $call */
+                /** @var array{call: string, args: array<string, string>, link?: ?string} $call */
                 $calls[] = $call;
             }
         }

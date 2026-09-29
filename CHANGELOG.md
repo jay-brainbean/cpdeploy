@@ -7,6 +7,20 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M3 deploy engine: `cpdeploy deploy <site>` builds each deploy in its own
+  release folder and switches to it atomically. Phase A plans (fetch, change
+  analysis, runtimes, preflight checks, questions up front), Phase B builds
+  (export, shared files and docroot extras, Composer install or vendor reuse,
+  frontend build or reuse, `storage:link`, `optimize`, custom commands), Phase C
+  goes live (maintenance only while migrations run, MultiPHP ordering, the
+  switch, first-deploy docroot conversion with a backup, health check), Phase D
+  cleans up and writes history.
+- Sites described by `~/cpdeploy/sites/<site>/site.yml` with validation and
+  per-type presets (Laravel, static, plain PHP, custom).
+- `cpdeploy status [site] [--json]`, `cpdeploy releases <site>
+  [protect|unprotect|delete <id>] [--json]`, `cpdeploy config <site>
+  show|get|set|edit`.
+- Scenario tests for the deploy paths and a `real-laravel` CI job.
 - M2 GitHub and git: repository addresses, per-site read-only deploy keys
   (create, register with a token or by hand, test, rotate, remove), the bare
   mirror (clone, fetch, resolve branches/tags/commits, export, repair), pinned

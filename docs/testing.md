@@ -69,12 +69,50 @@ Tests never use the network: every TCP probe goes to a closed local port
 | `CPDEPLOY_SYSTEM_ROOT` | Fake root for `/etc/cloudlinux-release`, `/opt/alt` and `/usr/local/bin/php` |
 | `CPDEPLOY_ARCH`, `CPDEPLOY_GLIBC` | Replace `uname -m` and the glibc probe |
 | `CPDEPLOY_TCP_OVERRIDE` | `host:port=ip:port,…` (`*` for any) for network probes |
-| `CPDEPLOY_HTTP_NO_BACKOFF=1` | No waiting between HTTP retries |
-
+| `CPDEPLOY_HTTP_NO_BACKOFF=1` | No waiting between HTTP retries and health-check attempts |
 | `CPDEPLOY_GIT_URL_OVERRIDE` | Every git remote URL (e.g. `file:///…/remote.git`) |
 | `CPDEPLOY_GITHUB_API` | The GitHub API base URL (a `FakeGitHub`) |
+| `CPDEPLOY_HTTP_OVERRIDE` | `host:port` that health-check and release-marker requests go to, over plain HTTP |
 
-`CPDEPLOY_HTTP_OVERRIDE` arrives with the health check (plan §16.2).
+## Deploy scenarios (`tests/Support/DeployScenario.php`)
+
+The scenario tests (plan §16.4, `tests/Scenario/Deploy*Test.php`) run the real
+CLI against:
+
+- `tests/Fixtures/apps/laravel`: a small app pushed to a local bare "GitHub"
+  repo, with a fake `artisan` that implements what cpdeploy runs
+  (`package:discover`, `storage:link`, `optimize`, `migrate:status`, `migrate`,
+  `down`, `up`, `db:seed`, `queue:restart`). Its "database" is
+  `storage/app/.fake-db.json` in shared storage; a migration file containing
+  `FAKE_FAIL` fails. Every call is logged to `storage/logs/fake-artisan.log`
+  with the PHP that ran it (`artisanCalls()`);
+- fake PHP 8.2 and 8.3 (`fakePhp()`), a local Composer mirror serving
+  `tests/Fixtures/composer/fake-composer.php` as `composer.phar` with its
+  checksum, and a fake Node 20 with `tests/Fixtures/node/fake-npm.sh`
+  (`CPD_FAKE_NPM=fail|oom`);
+- the fake `uapi`, whose MultiPHP answers are stateful and which records where
+  `current` pointed at each call (`CPD_WATCH_LINK`), so tests can check the PHP
+  change order (GL-03);
+- `DocrootWeb`: PHP's built-in server that re-resolves the docroot symlink on
+  every request, like Apache.
+
+The site is a hand-written `site.yml` (`writeSite()`) and `shared/.env`
+(`writeEnv()`).
+
+## Real Laravel (`tests/RealLaravel`)
+
+The CI job `real-laravel` creates a `laravel/laravel` project and deploys it
+twice with real Composer and Node (fakes only for `uapi` and the web server):
+
+```sh
+composer create-project laravel/laravel /tmp/app
+CPDEPLOY_REAL_LARAVEL_APP=/tmp/app vendor/bin/phpunit --testsuite RealLaravel
+```
+
+Without network access to getcomposer.org or GitHub's archives, add
+`CPDEPLOY_REAL_LARAVEL_COMPOSER_PHAR=$(command -v composer)` (served from a local
+mirror) and `CPDEPLOY_REAL_LARAVEL_COMPOSER_FLAGS="--no-dev --optimize-autoloader
+--no-interaction --prefer-source --no-progress"`.
 
 ## SSH integration tests
 

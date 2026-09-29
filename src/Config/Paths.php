@@ -177,9 +177,46 @@ final class Paths
         return $this->sharedDir($site) . '/env-backups';
     }
 
+    /**
+     * Optional Composer credentials (CMP-06); never written into a release.
+     */
+    public function sharedAuthJson(string $site): string
+    {
+        return $this->sharedDir($site) . '/auth.json';
+    }
+
+    /**
+     * The captured cPanel PHP handler block (DOC-04).
+     */
+    public function handlerBlock(string $site): string
+    {
+        return $this->sharedDir($site) . '/php-handler.block';
+    }
+
+    /**
+     * Docroot extras (.well-known, .user.ini, php.ini) linked into each release's web dir (REL-05).
+     */
+    public function sharedDocrootDir(string $site): string
+    {
+        return $this->sharedDir($site) . '/docroot';
+    }
+
+    public function releaseMeta(string $site, string $id): string
+    {
+        return $this->release($site, $id) . '/.release.json';
+    }
+
     public function backupsDir(string $site): string
     {
         return $this->siteDir($site) . '/backups';
+    }
+
+    /**
+     * backups/docroot-<ts>: the docroot as it was before the first go-live (DOC-02).
+     */
+    public function docrootBackup(string $site, string $stamp): string
+    {
+        return $this->backupsDir($site) . '/docroot-' . $stamp;
     }
 
     public function logsDir(string $site): string
