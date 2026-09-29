@@ -1,0 +1,25 @@
+{
+    "apiversion": 3,
+    "module": "Quota",
+    "func": "get_quota_info",
+    "result": {
+        "warnings": null,
+        "data": {
+            "under_inode_limit": "1",
+            "megabytes_used": 49704.84,
+            "inode_limit": "0",
+            "megabytes_remain": "0.00",
+            "megabyte_limit": "0.00",
+            "under_backup_threshold": 1,
+            "under_megabyte_limit": "1",
+            "inodes_remain": "0",
+            "inodes_used": 1197815,
+            "backup_warning_threshold_pct": 90,
+            "under_quota_overall": "1"
+        },
+        "errors": null,
+        "metadata": [],
+        "status": 1,
+        "messages": null
+    }
+}

@@ -4,9 +4,9 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestone M0 (foundation and distribution) is
-> in place: the tool installs and runs `cpdeploy check`. Deploying arrives in
-> later milestones. The specification is
+> **Status:** under development. Milestones M0 (foundation and distribution)
+> and M1 (server knowledge) are in place: the tool installs and
+> `cpdeploy check` inspects the server. Deploying arrives in later milestones. The specification is
 > [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
@@ -51,6 +51,16 @@ To use a specific PHP for the tool, set `CPDEPLOY_PHP=/path/to/php`.
 cpdeploy check          # human-readable
 cpdeploy check --json   # for scripts
 ```
+
+It checks, in groups:
+
+- **Tool:** the PHP running cpdeploy, its extensions and allowed functions.
+- **Programs:** git, ssh, curl, tar and the other programs cpdeploy uses.
+- **cPanel:** that cPanel answers, the MultiPHP versions, the PHP versions sites
+  can build with, MySQL, and whether this is CloudLinux.
+- **Account:** disk and inode use against the quota.
+- **Network:** GitHub over SSH (port 22, or 443 as a fallback), and the
+  Composer and Node.js download sites.
 
 Each line is ✓ (fine), ⚠ (works, with a limitation) or ✗ (must be fixed), with
 a hint. The command exits 3 when anything is ✗. Without a UTF-8 locale the

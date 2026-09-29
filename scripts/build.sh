@@ -29,7 +29,7 @@ fi
 
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 VERSION="${VERSION#v}"
-[ "$DIRTY" = "1" ] && [ -n "$(git status --porcelain)" ] && VERSION="$VERSION-dirty"
+case "$VERSION" in *-dirty) ;; *) [ "$DIRTY" = "1" ] && [ -n "$(git status --porcelain)" ] && VERSION="$VERSION-dirty" ;; esac
 
 BOX="$(command -v box || true)"
 if [ -z "$BOX" ] || ! "$BOX" --version 2>/dev/null | grep -q "Box version $BOX_VERSION"; then

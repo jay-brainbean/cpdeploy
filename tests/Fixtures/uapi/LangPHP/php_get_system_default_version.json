@@ -1,0 +1,15 @@
+{
+    "apiversion": 3,
+    "module": "LangPHP",
+    "func": "php_get_system_default_version",
+    "result": {
+        "errors": null,
+        "data": {
+            "version": "ea-php81"
+        },
+        "warnings": null,
+        "messages": null,
+        "status": 1,
+        "metadata": []
+    }
+}

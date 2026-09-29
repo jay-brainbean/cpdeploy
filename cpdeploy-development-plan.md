@@ -240,7 +240,7 @@ PHP ≥ 8.2 (required by Box 4), Composer 2, git, and Box (`humbug/box`, install
 - **`suggest`:** `ext-pcntl`, `ext-posix`.
 - **Platform pin.** `config.platform.php` MUST be `"8.1.0"`, so Composer only resolves versions that run on PHP 8.1. Symfony 6.4 LTS is the last line that supports 8.1.
 
-**ARC-01.** Laravel Prompts' `task()` (live scrolling output with a spinner) is used for deploy steps if it exists in the pinned version **(verify)**. If it doesn't, implement the same behaviour in `Ui/TaskReporter`: a spinner line with elapsed time, the last 10 output lines dimmed beneath it, and the whole block collapsing to `✓ Step  12s` when the step finishes.
+**ARC-01.** Laravel Prompts' `task()` (live scrolling output with a spinner) is used for deploy steps if it exists in the pinned version *(verified 2026-09-29: it exists in 0.3.24 but forks a renderer and replaces the SIGINT handler with `exit()`, so it is not used; see `docs/decisions.md`)*. If it doesn't, implement the same behaviour in `Ui/TaskReporter`: a spinner line with elapsed time, the last 10 output lines dimmed beneath it, and the whole block collapsing to `✓ Step  12s` when the step finishes.
 
 **ARC-02.** Laravel Prompts animates spinners only when `pcntl` is available, and shows a static spinner otherwise. Both MUST work.
 
@@ -537,7 +537,7 @@ The web server reaches files through the docroot symlink, so every folder on the
 | `~/.ssh` 700; private key 600; `.pub` 644 | | OpenSSH requirements |
 
 - **PERM-01.** The tool MUST NOT create anything with mode 777 or 666, and MUST NOT make secrets group- or world-readable.
-- **PERM-02.** PHP must run as the cPanel user (PHP-FPM, CGI, suPHP, LSAPI; the cPanel default) so it can read `.env` (600) and write `storage/`. `check` reports the handler through `LangPHP` **(verify field `php_fpm`)** and warns if the site uses mod_php (DSO).
+- **PERM-02.** PHP must run as the cPanel user (PHP-FPM, CGI, suPHP, LSAPI; the cPanel default) so it can read `.env` (600) and write `storage/`. `check` reports the handler through `LangPHP` (field `php_fpm`: `1`/`0`, *verified*) and warns if the site uses mod_php (DSO).
 - **PERM-03.** All files are owned by the cPanel user. Running as root is refused (§10.1), so ownership mismatches cannot happen. This also satisfies Apache's `SymLinksIfOwnerMatch`: every symlink and its target have the same owner.
 
 ### 7.3 Release anatomy: shared vs per release (Laravel)
@@ -701,23 +701,25 @@ releases/<id>/
   - Timeout 60 s. A failure → `E_UAPI` ("cPanel refused <Module>::<function>: <errors>").
 - **CP-02.** `uapi` not on PATH → `E_NOT_CPANEL`. `check` still runs and reports it.
 - **CP-03.** `CPDEPLOY_UAPI_BIN` overrides the binary (tests).
-- **CP-04. Functions used.** Field names marked (verify) must be confirmed against real output, and a fixture added.
+- **CP-04. Functions used.** Verified 2026-09-29 against cPanel 11.138 on AlmaLinux 8.10; fixtures in `tests/Fixtures/uapi`. Facts found on the real server:
+  - `uapi` **exits 0 even when a call fails**, and may print a `warn [uapi] …` line before the JSON. Only `result.status` tells success from failure.
+  - `phpversion_source` is an object: `{"domain": "<vhost>"}` when the vhost has its own version. The inherit form was not seen on that server; anything else is treated as inherited.
 
 | Module::function | Args | Fields used |
 |---|---|---|
 | `DomainInfo::domains_data` | `format=hash` | `main_domain{domain, documentroot, ip, homedir, type, scriptalias?}`, `addon_domains[]`, `sub_domains[]`, `parked_domains[]` (parked are listed but never selectable) |
-| `LangPHP::php_get_installed_versions` (verify) | none | `versions[]` e.g. `ea-php82` |
-| `LangPHP::php_get_vhost_versions` (verify fields) | none | per vhost: `vhost`, `version`, `documentroot`, `php_fpm`, `phpversion_source` (inherit detection) |
-| `LangPHP::php_get_system_default_version` (verify) | none | `version` |
+| `LangPHP::php_get_installed_versions` | none | `versions[]` e.g. `ea-php82` |
+| `LangPHP::php_get_vhost_versions` | none | per vhost: `vhost`, `version`, `documentroot`, `php_fpm` (1/0), `main_domain` (1/0), `phpversion_source` (inherit detection), also `account`, `homedir`, `php_fpm_pool_parms` |
+| `LangPHP::php_get_system_default_version` | none | `version` |
 | `LangPHP::php_set_vhost_versions` | `vhost=<domain>`, `version=ea-phpNN` | success, changed vhosts |
-| `Mysql::get_restrictions` | none | `prefix` (may be absent when prefixing is off), `database_name_length_limit`, `database_user_name_length_limit` |
+| `Mysql::get_restrictions` | none | `prefix` (e.g. `user_`; may be absent when prefixing is off), `max_database_name_length`, `max_username_length` (real names; the draft names `database_name_length_limit` / `database_user_name_length_limit` are also accepted) |
 | `Mysql::list_databases` | none | `database`, `users[]` |
 | `Mysql::list_users` | none | `user`, `databases[]` |
 | `Mysql::create_database` | `name` | |
 | `Mysql::create_user` | `name`, `password` | see SEC-07 |
 | `Mysql::set_privileges_on_database` | `user`, `database`, `privileges=ALL PRIVILEGES` (encoded) | |
 | `Mysql::delete_database` / `delete_user` | `name` | remove-site only |
-| `Quota::get_quota_info` | none | `megabytes_used`, `megabyte_limit` (0 = unlimited), `megabytes_remain`, `inodes_used`, `inode_limit` (0 = unlimited), `inodes_remain` |
+| `Quota::get_quota_info` | none | `megabytes_used`, `megabyte_limit` (0 = unlimited), `megabytes_remain`, `inodes_used`, `inode_limit` (0 = unlimited), `inodes_remain`. Values mix numbers and numeric strings (`"0.00"`) |
 
 - **CP-05 (MultiPHP facts to respect).**
   - Setting a PHP version fails if the vhost's docroot has no `.htaccess`. The tool MUST make sure the live web dir has an `.htaccess` (creating an empty one if needed) before calling `php_set_vhost_versions`.
@@ -2850,9 +2852,9 @@ Verify everything marked (verify) during M1/M2 and replace this appendix's examp
 
 ```bash
 uapi --output=json DomainInfo domains_data format=hash
-uapi --output=json LangPHP php_get_installed_versions                 # (verify)
-uapi --output=json LangPHP php_get_vhost_versions                     # (verify field names)
-uapi --output=json LangPHP php_get_system_default_version             # (verify)
+uapi --output=json LangPHP php_get_installed_versions
+uapi --output=json LangPHP php_get_vhost_versions
+uapi --output=json LangPHP php_get_system_default_version
 uapi --output=json LangPHP php_set_vhost_versions vhost=shop.example.com version=ea-php83
 uapi --output=json Mysql get_restrictions
 uapi --output=json Mysql list_databases
@@ -2867,7 +2869,9 @@ uapi --output=json Quota get_quota_info
 
 - **Response envelope:** `{"apiversion":3, "module":"…", "func":"…", "result":{"status":1|0, "data":…, "errors":[…]|null, "warnings":…, "messages":…, "metadata":{…}}}`.
 - Argument values must be URI-encoded.
-- `Mysql::get_restrictions` example: `{"prefix":"accountname_", "database_name_length_limit":64, "database_user_name_length_limit":16}`. `prefix` is absent when prefixing is disabled.
+- `Mysql::get_restrictions` real output (cPanel 11.138): `{"prefix":"accountname_", "max_database_name_length":64, "max_username_length":32}`. `prefix` is absent when prefixing is disabled.
+- A failed call (real output; exit code 0): `[… +0000] warn [uapi] Could not find “x” in module “LangPHP”.` followed by `{"apiversion":3,…,"result":{"status":0,"data":null,"errors":["The system could not find the function “x” in the module “LangPHP”."],…}}`.
+- `/usr/bin/php` on that server is **php-cgi**, not the CLI: PHP-01's CLI filter is required.
 
 ### B.2 GitHub REST API
 

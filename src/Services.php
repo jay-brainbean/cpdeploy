@@ -5,15 +5,31 @@ declare(strict_types=1);
 namespace Cpdeploy;
 
 use Cpdeploy\Check\ServerCheck;
+use Cpdeploy\Check\ServerCheckServices;
 use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Paths;
+use Cpdeploy\Cpanel\CloudLinux;
+use Cpdeploy\Cpanel\DomainService;
+use Cpdeploy\Cpanel\MultiPhpService;
+use Cpdeploy\Cpanel\MysqlService;
+use Cpdeploy\Cpanel\QuotaService;
+use Cpdeploy\Cpanel\Uapi;
+use Cpdeploy\Runtime\ComposerInstaller;
+use Cpdeploy\Runtime\NodeInstaller;
+use Cpdeploy\Runtime\NodeLocator;
+use Cpdeploy\Runtime\NodeResolver;
+use Cpdeploy\Runtime\PackageManager;
+use Cpdeploy\Runtime\PhpLocator;
+use Cpdeploy\Runtime\PhpService;
 use Cpdeploy\Support\Clock;
 use Cpdeploy\Support\Environment;
 use Cpdeploy\Support\Fs;
+use Cpdeploy\Support\Http;
 use Cpdeploy\Support\Masker;
 use Cpdeploy\Support\Shell;
 use Cpdeploy\Support\Signals;
 use Cpdeploy\Support\SystemInfo;
+use Cpdeploy\Support\TcpProbe;
 use Cpdeploy\Ui\Asker;
 use Cpdeploy\Ui\NonInteractiveAsker;
 use Cpdeploy\Ui\Pager;
@@ -40,6 +56,12 @@ final class Services
     private ?Fs $fs = null;
     private ?GlobalConfig $config = null;
     private ?SystemInfo $system = null;
+    private ?Http $http = null;
+    private ?Uapi $uapi = null;
+    private ?DomainService $domains = null;
+    private ?MultiPhpService $multiPhp = null;
+    private ?PhpLocator $phpLocator = null;
+    private ?NodeLocator $nodeLocator = null;
 
     public function __construct(private readonly Environment $environment)
     {
@@ -90,9 +112,146 @@ final class Services
         return $this->system ??= new SystemInfo($this->environment);
     }
 
+    /**
+     * CPDEPLOY_HTTP_NO_BACKOFF=1 (test mode only) skips the waits between retries.
+     */
+    public function http(): Http
+    {
+        $noWait = $this->environment->testing('CPDEPLOY_HTTP_NO_BACKOFF') === '1'
+            ? static function (int $seconds): void {
+            }
+        : null;
+
+        return $this->http ??= new Http($this->shell(), $this->fs(), $noWait);
+    }
+
+    public function uapi(): Uapi
+    {
+        return $this->uapi ??= new Uapi($this->shell(), $this->system()->uapiBinary());
+    }
+
+    public function domains(): DomainService
+    {
+        return $this->domains ??= new DomainService($this->uapi());
+    }
+
+    public function multiPhp(): MultiPhpService
+    {
+        return $this->multiPhp ??= new MultiPhpService($this->uapi());
+    }
+
+    public function mysql(): MysqlService
+    {
+        return new MysqlService($this->uapi());
+    }
+
+    public function quota(): QuotaService
+    {
+        return new QuotaService($this->uapi());
+    }
+
+    /**
+     * CPDEPLOY_SYSTEM_ROOT (test mode only) points the /etc, /opt and /usr/local
+     * lookups at a fake tree.
+     */
+    public function cloudLinux(): CloudLinux
+    {
+        return new CloudLinux($this->systemRoot());
+    }
+
+    public function systemRoot(): string
+    {
+        return rtrim($this->environment->testing('CPDEPLOY_SYSTEM_ROOT') ?? '', '/');
+    }
+
+    /**
+     * CPDEPLOY_PHP_SEARCH_PATHS (test mode only): colon-separated folders scanned
+     * for both ea-phpNN/root/usr/bin/php and phpNN/usr/bin/php.
+     */
+    public function phpLocator(): PhpLocator
+    {
+        if ($this->phpLocator === null) {
+            $override = $this->environment->testing('CPDEPLOY_PHP_SEARCH_PATHS');
+            $roots = $override !== null ? array_values(array_filter(explode(':', $override))) : null;
+            $this->phpLocator = new PhpLocator(
+                $this->shell(),
+                $this->uapi()->available() ? $this->multiPhp() : null,
+                $roots ?? ['/opt/cpanel'],
+                $roots ?? ['/opt/alt'],
+            );
+        }
+
+        return $this->phpLocator;
+    }
+
+    public function php(): PhpService
+    {
+        return new PhpService($this->phpLocator(), $this->multiPhp(), $this->cloudLinux(), $this->shell());
+    }
+
+    public function composerInstaller(): ComposerInstaller
+    {
+        return new ComposerInstaller($this->http(), $this->fs(), $this->paths(), $this->config()->mirror('composer'));
+    }
+
+    /**
+     * CPDEPLOY_NODE_SEARCH_PATHS (test mode only): colon-separated glob patterns of
+     * bin folders that replace the ea-nodejs, alt-nodejs and nvm locations.
+     */
+    public function nodeLocator(): NodeLocator
+    {
+        if ($this->nodeLocator === null) {
+            $toolsPattern = $this->paths()->nodeDir() . '/node-v*-linux-*/bin';
+            $override = $this->environment->testing('CPDEPLOY_NODE_SEARCH_PATHS');
+            $patterns = $override !== null
+                ? [...array_values(array_filter(explode(':', $override))), $toolsPattern]
+                : NodeLocator::defaultPatterns($this->paths()->home(), $this->paths()->nodeDir());
+            $this->nodeLocator = new NodeLocator($this->shell(), $patterns);
+        }
+
+        return $this->nodeLocator;
+    }
+
+    public function nodeResolver(): NodeResolver
+    {
+        return new NodeResolver($this->nodeLocator(), $this->http(), $this->fs(), $this->paths(), $this->config()->mirror('node'));
+    }
+
+    /**
+     * CPDEPLOY_ARCH and CPDEPLOY_GLIBC (test mode only) replace uname -m and the glibc probe.
+     */
+    public function nodeInstaller(): NodeInstaller
+    {
+        return new NodeInstaller(
+            $this->http(),
+            $this->fs(),
+            $this->shell(),
+            $this->paths(),
+            $this->config()->mirror('node'),
+            $this->environment->testing('CPDEPLOY_ARCH'),
+            $this->environment->testing('CPDEPLOY_GLIBC'),
+        );
+    }
+
+    public function packageManager(): PackageManager
+    {
+        return new PackageManager($this->shell(), $this->fs(), $this->paths());
+    }
+
     public function serverCheck(): ServerCheck
     {
-        return new ServerCheck($this->shell(), $this->system());
+        return new ServerCheck($this->shell(), $this->system(), new ServerCheckServices(
+            $this->uapi(),
+            $this->domains(),
+            $this->multiPhp(),
+            $this->mysql(),
+            $this->quota(),
+            $this->cloudLinux(),
+            $this->phpLocator(),
+            TcpProbe::fromEnvironment($this->environment),
+            $this->config(),
+            is_file($this->paths()->tokenFile()),
+        ));
     }
 
     public function theme(): Theme
