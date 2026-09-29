@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cpdeploy status --json",
+  "type": "object",
+  "required": ["schema", "sites"],
+  "properties": {
+    "schema": {"const": 1},
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "domain", "branch", "live", "last", "maintenance", "locked", "interrupted"],
+        "properties": {
+          "name": {"type": "string"},
+          "type": {"type": ["string", "null"]},
+          "domain": {"type": ["string", "null"]},
+          "branch": {"type": ["string", "null"]},
+          "error": {"type": "string"},
+          "live": {
+            "type": ["object", "null"],
+            "required": ["release", "commit", "message", "deployed_at", "php", "node"],
+            "properties": {
+              "release": {"type": "string"},
+              "commit": {"type": ["string", "null"]},
+              "message": {"type": "string"},
+              "deployed_at": {"type": ["string", "null"]},
+              "php": {"type": ["string", "null"]},
+              "node": {"type": ["string", "null"]}
+            }
+          },
+          "last": {
+            "type": ["object", "null"],
+            "required": ["action", "result", "at"],
+            "properties": {
+              "action": {"type": ["string", "null"]},
+              "result": {"type": ["string", "null"]},
+              "at": {"type": ["string", "null"]}
+            }
+          },
+          "maintenance": {"type": "boolean"},
+          "locked": {"type": "boolean"},
+          "interrupted": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

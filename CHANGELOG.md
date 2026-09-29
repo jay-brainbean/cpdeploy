@@ -7,6 +7,26 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M7 *Remove site* and `cpdeploy remove <site>`: the domain keeps running from
+  a plain copy (`--detach`), gets its old folder back (`--restore-backup`) or
+  an empty one (`--empty`); then the deploy key, optionally the database, the
+  releases and the site folder go, and `.env` and uploads are kept in
+  `~/cpdeploy/removed/` unless `--delete-shared`.
+- Settings in the menu: GitHub token, defaults for new sites (now used by the
+  wizard and `add --from`), timeouts, display, GitHub host keys, About, and
+  updates.
+- `cpdeploy self-update [--check] [--rollback] [--pre]`: checksum-verified
+  updates from GitHub releases, keeping the previous version.
+- `cpdeploy check [site] [--probe]`: a group per site (deploy key, PHP, Node,
+  `.env` and its mode, the docroot link, the live release, shared folders,
+  interrupted operations, maintenance mode, and the PHP the domain really
+  serves); `--refresh-host-keys` replaces GitHub's SSH host keys after you
+  compare the fingerprints.
+- JSON Schemas for `status`, `releases`, `logs` and `check --json` in
+  `resources/schemas/`.
+- A release workflow: a version tag runs the full CI and publishes
+  `cpdeploy.phar`, its checksum and `install.sh`, with the notes from this
+  file.
 - M6 add-site wizard: `cpdeploy add` (and *Add a new site* in the menu) walks
   through repository, GitHub access (deploy key added with the token, or shown
   to add by hand), project type, domain, served folder, PHP (checked against

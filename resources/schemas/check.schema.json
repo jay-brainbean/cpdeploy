@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cpdeploy check --json",
+  "type": "object",
+  "required": ["schema", "groups"],
+  "properties": {
+    "schema": {"const": 1},
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "checks"],
+        "properties": {
+          "name": {"type": "string"},
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "status", "message", "hint"],
+              "properties": {
+                "id": {"type": "string"},
+                "status": {"enum": ["ok", "warn", "fail", "info"]},
+                "message": {"type": "string"},
+                "hint": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

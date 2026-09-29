@@ -18,7 +18,9 @@ use Cpdeploy\Commands\NodeCommand;
 use Cpdeploy\Commands\PhpCommand;
 use Cpdeploy\Commands\RecoverCommand;
 use Cpdeploy\Commands\ReleasesCommand;
+use Cpdeploy\Commands\RemoveCommand;
 use Cpdeploy\Commands\RollbackCommand;
+use Cpdeploy\Commands\SelfUpdateCommand;
 use Cpdeploy\Commands\StatusCommand;
 use Cpdeploy\Commands\TokenCommand;
 use Cpdeploy\Config\Paths;
@@ -61,8 +63,10 @@ final class Application extends ConsoleApplication
         $this->add(new NodeCommand($services));
         $this->add(new PhpCommand($services));
         $this->add(new RecoverCommand($services));
+        $this->add(new RemoveCommand($services));
         $this->add(new ReleasesCommand($services));
         $this->add(new RollbackCommand($services));
+        $this->add(new SelfUpdateCommand($services));
         $this->add(new StatusCommand($services));
         $this->add(new TokenCommand($services));
         // UIG-01: `cpdeploy` alone opens the menu (the list without a terminal).

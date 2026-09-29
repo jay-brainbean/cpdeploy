@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cpdeploy releases <site> --json",
+  "type": "object",
+  "required": ["schema", "site", "live", "releases"],
+  "properties": {
+    "schema": {"const": 1},
+    "site": {"type": "string"},
+    "live": {"type": ["string", "null"]},
+    "releases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "protected", "commit", "short", "message", "created_at", "php", "size_kb"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"enum": ["building", "ready", "live", "failed", "unknown"]},
+          "protected": {"type": "boolean"},
+          "commit": {"type": ["string", "null"]},
+          "short": {"type": "string"},
+          "message": {"type": "string"},
+          "created_at": {"type": ["string", "null"]},
+          "php": {"type": ["string", "null"]},
+          "size_kb": {"type": ["integer", "null"]}
+        }
+      }
+    }
+  }
+}
