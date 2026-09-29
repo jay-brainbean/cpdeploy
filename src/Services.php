@@ -17,6 +17,7 @@ use Cpdeploy\Cpanel\MultiPhpService;
 use Cpdeploy\Cpanel\MysqlService;
 use Cpdeploy\Cpanel\QuotaService;
 use Cpdeploy\Cpanel\Uapi;
+use Cpdeploy\Database\DatabaseService;
 use Cpdeploy\Database\DbCheck;
 use Cpdeploy\Deploy\Builder;
 use Cpdeploy\Deploy\ChangeAnalyzer;
@@ -90,6 +91,11 @@ use Cpdeploy\Ui\Reporter;
 use Cpdeploy\Ui\ScriptedAsker;
 use Cpdeploy\Ui\TaskReporter;
 use Cpdeploy\Ui\Theme;
+use Cpdeploy\Wizard\AddFromFile;
+use Cpdeploy\Wizard\LegacyImporter;
+use Cpdeploy\Wizard\RepoAccess;
+use Cpdeploy\Wizard\SiteCreator;
+use Cpdeploy\Wizard\SiteInspector;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -603,6 +609,77 @@ final class Services
     public function siteInfo(): SiteInfo
     {
         return new SiteInfo($this->paths(), $this->fs(), $this->sites(), $this->releases(), $this->docroots(), $this->phpChange(), $this->deployKeys());
+    }
+
+    public function databases(): DatabaseService
+    {
+        return new DatabaseService($this->mysql(), $this->dbCheck(), $this->masker(), $this->paths(), $this->fs());
+    }
+
+    public function repoAccess(): RepoAccess
+    {
+        return new RepoAccess(
+            $this->paths(),
+            $this->fs(),
+            $this->system(),
+            $this->deployKeys(),
+            $this->git(),
+            $this->transport(),
+            fn (): GitHubApi => $this->github(),
+        );
+    }
+
+    public function siteInspector(): SiteInspector
+    {
+        return new SiteInspector(
+            $this->sites(),
+            $this->presets(),
+            $this->domains(),
+            $this->docroots(),
+            $this->projects(),
+            $this->phpLocator(),
+            $this->php(),
+            $this->composerInstaller(),
+            $this->composerInspector(),
+            $this->nodeLocator(),
+            $this->nodeResolver(),
+            $this->nodeInstaller(),
+        );
+    }
+
+    public function addFromFile(): AddFromFile
+    {
+        return new AddFromFile(
+            $this->repoAccess(),
+            $this->siteInspector(),
+            $this->siteCreator(),
+            $this->domains(),
+            $this->sites(),
+            $this->presets(),
+            $this->environment,
+        );
+    }
+
+    public function legacyImporter(): LegacyImporter
+    {
+        return new LegacyImporter($this->paths(), $this->shell());
+    }
+
+    public function siteCreator(): SiteCreator
+    {
+        return new SiteCreator(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->system(),
+            $this->environment,
+            $this->sites(),
+            $this->presets(),
+            $this->databases(),
+            $this->php(),
+            $this->finisher(),
+            $this->masker(),
+        );
     }
 
     public function editor(): Editor

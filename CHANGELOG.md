@@ -7,6 +7,21 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ### Added
 
+- M6 add-site wizard: `cpdeploy add` (and *Add a new site* in the menu) walks
+  through repository, GitHub access (deploy key added with the token, or shown
+  to add by hand), project type, domain, served folder, PHP (checked against
+  `composer.lock`), Node, `.env` and database, deploy steps and a review. Back
+  on every screen, nothing written before Create, Cancel removes the key and
+  the download, and a failed Create is undone.
+- New MySQL database and user through cPanel with a generated password, an
+  existing database (tested right away), or SQLite; a production `.env` from
+  `.env.example` with a new `APP_KEY`.
+- Importing an existing Laravel app found in the domain's folder (`.env` and
+  `storage/` copied), and sites of the old `cpanel-git-setup.sh`
+  (`~/deployments/<name>`), with removal of its cron line and webhook file after
+  the first deploy.
+- `cpdeploy add --from=<file.yml>`: a `site.yml` plus a `setup:` section
+  creates the site without questions (and can deploy it).
 - M5 menus: `cpdeploy` opens the main menu on a terminal (site table, banners
   for interrupted operations, maintenance mode and the GitHub token), the deploy
   screen (with *Retry* / *Retry with changes…* after a failure, and *Generate

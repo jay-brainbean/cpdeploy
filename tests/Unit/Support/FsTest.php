@@ -251,4 +251,32 @@ final class FsTest extends TestCase
         self::assertNotSame(fileinode($src . '/vendor/a.php'), fileinode($dst . '/a.php'));
         self::assertGreaterThan(0, $this->fs->diskUsageKb($dst));
     }
+
+    /**
+     * WIZ-04 undo: exactly sites/<name>, links inside are removed, not followed.
+     */
+    public function testDeleteSiteFolder(): void
+    {
+        $site = $this->paths->siteDir('shop');
+        $this->fs->ensureDir($site . '/shared', 0711);
+        mkdir($this->tmp . '/outside');
+        file_put_contents($this->tmp . '/outside/sentinel.txt', 'keep me');
+        symlink($this->tmp . '/outside', $site . '/shared/outside');
+
+        $this->fs->deleteSiteFolder('shop');
+
+        self::assertDirectoryDoesNotExist($site);
+        self::assertFileExists($this->tmp . '/outside/sentinel.txt');
+        $this->fs->deleteSiteFolder('shop'); // already gone: nothing to do
+
+        symlink($this->tmp . '/outside', $this->paths->siteDir('linked'));
+        try {
+            $this->fs->deleteSiteFolder('linked');
+            self::fail('a symlinked site folder must be refused');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('it is a symlink', $e->getMessage());
+        }
+        $this->expectException(RuntimeException::class);
+        $this->fs->deleteSiteFolder('../tmp');
+    }
 }

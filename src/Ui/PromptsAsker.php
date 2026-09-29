@@ -16,6 +16,7 @@ use function Laravel\Prompts\pause;
 use function Laravel\Prompts\search;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\text;
+use function Laravel\Prompts\textarea;
 
 /**
  * Interactive answers through Laravel Prompts. Labels are cut to 74 columns (§5.3).
@@ -75,6 +76,11 @@ final class PromptsAsker implements Asker
     public function password(string $label, string $hint = ''): string
     {
         return password(label: Format::truncate($label), hint: $hint);
+    }
+
+    public function textarea(string $label, string $default = '', string $hint = ''): string
+    {
+        return textarea(label: Format::truncate($label), default: $default, hint: $hint);
     }
 
     public function confirm(string $label, bool $default = true, string $hint = ''): bool

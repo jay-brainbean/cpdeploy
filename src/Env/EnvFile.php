@@ -214,6 +214,22 @@ final class EnvFile
     }
 
     /**
+     * A copy with KEY's active line turned into a comment (`# KEY=…`), e.g. the
+     * DB_* keys SQLite doesn't use (DB-03).
+     */
+    public function comment(string $key): self
+    {
+        $entries = $this->entries;
+        foreach ($entries as $i => $entry) {
+            if ($entry['key'] === $key) {
+                $entries[$i] = ['key' => null, 'value' => null, 'text' => '# ' . ltrim($entry['text']), 'line' => $entry['line']];
+            }
+        }
+
+        return new self($entries, $this->warnings);
+    }
+
+    /**
      * ENV-04: unquoted when safe; single quotes when there is a `$` (no ${VAR}
      * interpolation); else double quotes with escapes. `$` together with `'`
      * can't be written safely and is refused.

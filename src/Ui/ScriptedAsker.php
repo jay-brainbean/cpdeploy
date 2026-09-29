@@ -97,6 +97,13 @@ final class ScriptedAsker implements Asker
         return is_scalar($answer) ? (string) $answer : '';
     }
 
+    public function textarea(string $label, string $default = '', string $hint = ''): string
+    {
+        $answer = $this->next('textarea', $label);
+
+        return $answer === null ? $default : (is_scalar($answer) ? (string) $answer : '');
+    }
+
     public function confirm(string $label, bool $default = true, string $hint = ''): bool
     {
         $answer = $this->next('confirm', $label);

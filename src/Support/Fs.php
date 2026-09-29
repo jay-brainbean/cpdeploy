@@ -167,6 +167,27 @@ final class Fs
     }
 
     /**
+     * Removes a whole site folder, sites/<name>, without following symlinks.
+     * Only for undoing a Create that failed (WIZ-04) and, later, removing a
+     * site; FS-03's deleteTree() never allows it. The path must be exactly
+     * sites/<name> and must not be a symlink.
+     */
+    public function deleteSiteFolder(string $site): void
+    {
+        if (preg_match('/^[a-z0-9][a-z0-9-]{0,30}$/', $site) !== 1) {
+            throw new RuntimeException("Refusing to delete the site folder of '{$site}': not a site name");
+        }
+        $dir = self::normalize($this->paths->sitesDir() . '/' . $site);
+        if (is_link($dir)) {
+            throw new RuntimeException("Refusing to delete {$dir}: it is a symlink");
+        }
+        if (!is_dir($dir)) {
+            return;
+        }
+        $this->deleteNoFollow($dir);
+    }
+
+    /**
      * Throws unless deleteTree() may remove $path.
      */
     public function assertDeletable(string $path): void
