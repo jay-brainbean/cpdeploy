@@ -52,6 +52,14 @@ final class NonInteractiveAsker implements Asker
         throw $this->needs($label);
     }
 
+    public function textarea(string $label, string $default = '', string $hint = ''): string
+    {
+        if ($this->yes && $default !== '') {
+            return $default;
+        }
+        throw $this->needs($label);
+    }
+
     public function confirm(string $label, bool $default = true, string $hint = ''): bool
     {
         if ($this->yes) {

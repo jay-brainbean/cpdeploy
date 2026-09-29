@@ -4,11 +4,10 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestones M0–M5 are in place: the tool
-> installs, checks the server, deploys, rolls back and recovers sites described
-> by a hand-written `site.yml`, and `cpdeploy` opens a menu to deploy and manage
-> them. The add-site wizard (M6) comes next; until then, sites are added by
-> writing `site.yml`. The specification is
+> **Status:** under development. Milestones M0–M6 are in place: the tool
+> installs, checks the server, adds sites with a wizard (or from a file),
+> deploys, rolls back and recovers them, and `cpdeploy` opens a menu to deploy
+> and manage them. The specification is
 > [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
@@ -98,10 +97,83 @@ cpdeploy trusts only GitHub's published SSH host keys (shipped with the tool
 and written to `~/cpdeploy/known_hosts`); it never edits `~/.ssh/config` or
 `~/.ssh/known_hosts`.
 
-## Deploy a site
+## Add a site
 
-Until the add-site wizard arrives, a site is described by hand in
-`~/cpdeploy/sites/<site>/site.yml` (mode 600). The smallest useful file:
+```sh
+cpdeploy add                      # the add-site wizard (also: menu → Add a new site)
+```
+
+The wizard asks ten short questions and writes nothing until you confirm at the
+end:
+
+1. **Repository** — from your GitHub repos (with a token) or a pasted address
+   (`acme/shop`, `git@github.com:acme/shop.git`, …), the branch, and the site
+   name.
+2. **GitHub access** — creates the site's read-only deploy key
+   `~/.ssh/cpdeploy_<site>`; with a token it is added to the repository for
+   you, otherwise the wizard shows the key and the link and waits until access
+   works. Then it downloads the repository.
+3. **Project type** — Laravel, static site / SPA, plain PHP or custom (detected).
+4. **Domain** — any main, addon or subdomain of the account, with the state of
+   its folder. Files already in the folder are moved to a backup at the first
+   deploy, never deleted. An existing Laravel app found there can be imported
+   (its `.env` and `storage/` are copied).
+5. **How the site is served** — the folder inside each release the domain
+   serves (`public` for Laravel).
+6. **PHP version** — every installed version checked against `composer.lock`
+   (version and extensions); optionally also set for the domain in MultiPHP at
+   go-live.
+7. **Node.js** — for the frontend build: an installed version, a download, or
+   none.
+8. **Environment and database** — a `.env` from `.env.example` (production
+   values and a new `APP_KEY`), a pasted one, or later; a new MySQL database and
+   user (named `<cpanel prefix><site>`, with a random password), an existing
+   one (tested right away), SQLite, or none.
+9. **Deploy steps** — when each step runs, custom commands, how many releases
+   to keep, the health check.
+10. **Review** — *Create site and deploy now*, *Create site only*, *Edit a
+    step…* or *Cancel*.
+
+Every screen has *← Back*; text questions accept `<` to go back. Cancelling
+removes the deploy key the wizard created (also on GitHub) and the downloaded
+copy. If creating the site fails, everything made so far (the database and user
+included) is removed again.
+
+Sites set up by the old `cpanel-git-setup.sh` (in `~/deployments/<name>`) are
+offered for import at step 1: the answers are filled in, the old deploy key is
+copied, and after the first deploy cpdeploy offers to remove the old cron line
+and webhook file (`~/deployments/<name>` itself is left for you to delete).
+
+### Without questions: `add --from`
+
+```sh
+cpdeploy add --from=shop.yml
+```
+
+`shop.yml` is a `site.yml` (see below) plus a `setup:` section:
+
+```yaml
+name: shop
+repo: { owner: acme, name: shop, branch: main }
+domain: { name: shop.example.com }       # docroot: cPanel's, unless given
+php: { version: "8.3" }                  # detected when left out
+setup:
+  env: example                           # example | file:<path> | none
+  app_url: https://shop.example.com
+  database: create                       # create | existing | sqlite | none
+  # db_existing: { name: me_shop, user: me_shop, password_env: SHOP_DB_PASS }
+  deploy_now: true
+```
+
+The password of an existing database is read from the environment variable
+`password_env` names, never from the file. Without a GitHub token the command
+prints the deploy key and how to add it, and exits 2; run the same command again
+once the key is on GitHub.
+
+## The site file
+
+Each site is described by `~/cpdeploy/sites/<site>/site.yml` (mode 600), written
+by the wizard. The smallest useful file:
 
 ```yaml
 schema: 1
@@ -112,13 +184,16 @@ domain: { name: shop.example.com, docroot: /home/you/shop.example.com }
 php: { version: "8.3" }
 ```
 
-Every other setting has a default (see the plan, §8.2 and §8.4). Also needed:
+Every other setting has a default (see the plan, §8.2 and §8.4). Change it with
+`cpdeploy config shop set|edit` or the menu. A deploy also needs:
 
 - the deploy key `~/.ssh/cpdeploy_shop`, added to the repository on GitHub
   (read-only);
 - for Laravel, `~/cpdeploy/sites/shop/shared/.env` (mode 600) with `APP_KEY` set.
   The frontend build runs with this production `.env`, so `VITE_*` values come
   from it.
+
+## Deploy a site
 
 ```sh
 cpdeploy deploy shop                              # asks what it needs to know

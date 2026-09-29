@@ -11,6 +11,7 @@ use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Support\Log;
 use Cpdeploy\Ui\Format;
 use Cpdeploy\Version;
+use Cpdeploy\Wizard\AddSiteWizard;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Helper\TableStyle;
 
@@ -104,10 +105,7 @@ final class MainMenu
                 $this->ctx->pause();
                 break;
             case 'add':
-                $this->ctx->title('Add a new site');
-                $this->ctx->line('The add-site wizard is not available in this version yet.');
-                $this->ctx->line('Until then, describe the site in ~/cpdeploy/sites/<site>/site.yml (see the README), then deploy it here.');
-                $this->ctx->pause();
+                (new AddSiteWizard($this->ctx))->run();
                 break;
             case 'settings':
                 $this->ctx->title('Settings');

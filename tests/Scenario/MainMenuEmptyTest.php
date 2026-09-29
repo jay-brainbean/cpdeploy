@@ -26,6 +26,8 @@ final class MainMenuEmptyTest extends TestCase
         $this->fakeUapi();
         $asker = new ScriptedAsker([
             ['What would you like to do?', 'add'],
+            ['How do you want to pick the repository?', 'cancel'],
+            ['Cancel adding this site?', true],
             ['What would you like to do?', 'check'],
             ['What would you like to do?', 'settings'],
             ['What would you like to do?', 'quit'],
@@ -39,7 +41,8 @@ final class MainMenuEmptyTest extends TestCase
         self::assertSame(0, $asker->remaining());
         self::assertStringContainsString('Welcome to cpdeploy', $screen);
         self::assertStringContainsString('No sites yet. Add your first site to get started.', $screen);
-        self::assertStringContainsString('The add-site wizard is not available in this version yet', $screen);
+        self::assertStringContainsString('cpdeploy · Add a site · Step 1/10 · Repository', $screen);
+        self::assertStringContainsString('Nothing was added.', $screen);
         self::assertStringContainsString('cpdeploy · Server check', $screen);
         self::assertMatchesRegularExpression('/\d+ ok, \d+ warnings?, \d+ problems?/', $screen);
         self::assertStringContainsString('cpdeploy token set', $screen);

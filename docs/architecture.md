@@ -150,7 +150,7 @@ shown in the §13 format (`Ui/ErrorView`) and the screen returns to its menu
 
 | Screen | Service (shared with the command) |
 |---|---|
-| `MainMenu` | `SiteStatus`, `Recovery`, `ServerCheck`, `History` |
+| `MainMenu` | `SiteStatus`, `Recovery`, `ServerCheck`, `History`; *Add a new site* runs `Wizard/AddSiteWizard` (`add`) |
 | `DeployScreen` | `Deployer` (`deploy`), `MirrorService` for *another ref* |
 | `ManageSiteMenu` → Branch, Composer credentials, Site info | `SiteSettings`, `MirrorService`, `ComposerAuth`, `SiteInfo` |
 | `ReleasesMenu` | `ReleaseActions` (`releases`), `Rollback` (`rollback`) |
@@ -160,6 +160,28 @@ shown in the §13 format (`Ui/ErrorView`) and the screen returns to its menu
 | `LaravelToolsMenu` | `Laravel/LaravelTools` (`artisan`, `down`, `up`) |
 | `KeyMenu` | `Git/SiteKeys` (`key`) |
 | `LogsMenu` | `Deploy/History` (`logs`) |
+
+## The add-site wizard (`Wizard/`)
+
+`AddSiteWizard` is a step machine over ten `WizardStep` classes
+(`Wizard/Steps/`); each returns *next*, *back*, *cancel*, *goto:N* or *create*.
+The answers live in `WizardState`, which also produces the `site.yml` the site
+would get (`config()`); the side effects before Create — the deploy key (made
+and registered by `RepoAccess`) and the temporary bare clone — are recorded in
+`WizardTransaction`, so *Cancel* can undo them (WIZ-03).
+
+| Piece | Job |
+|---|---|
+| `RepoAccess` | repo list, transport, deploy key (GIT-05/17), access test, temporary clone, cleanup |
+| `SiteInspector` | read-only analysis for steps 3–7: type, domains and folder states (DOC-01), PHP compatibility (PHP-05), Node options |
+| `SiteCreator` | WIZ-04: site folder + mirror, shared/, database (DB-01…03), `.env` (ENV-09), `site.yml`, history — undone in reverse on failure |
+| `Database/DatabaseService` | DB-01 names/passwords through cPanel, DB-02/04 checks, DB-03 SQLite, DB-05 drop |
+| `Env/EnvCreator` | the new `.env` from `.env.example` or a template |
+| `LegacyImporter` | `~/deployments/<name>` sites of `cpanel-git-setup.sh` (LEG-01…04) |
+| `AddFromFile` | `add --from`: the same state filled from a file, then the same services (ARC-03) |
+
+Step 9 is `Menus/StepsMenu::edit()` on the wizard's state instead of a saved
+site.
 
 `Ui/Editor` opens text in `ui.editor` → `$VISUAL` → `$EDITOR` → `nano` → `vi`
 from a private temp copy, validates the result, and offers *Edit again* /

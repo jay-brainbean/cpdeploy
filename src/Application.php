@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cpdeploy;
 
+use Cpdeploy\Commands\AddCommand;
 use Cpdeploy\Commands\ArtisanCommand;
 use Cpdeploy\Commands\CheckCommand;
 use Cpdeploy\Commands\ConfigCommand;
@@ -47,6 +48,7 @@ final class Application extends ConsoleApplication
         $this->setCatchExceptions(false);
         $this->setAutoExit(false);
 
+        $this->add(new AddCommand($services));
         $this->add(new ArtisanCommand($services));
         $this->add(new CheckCommand($services));
         $this->add(new ConfigCommand($services));

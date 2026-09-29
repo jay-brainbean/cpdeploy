@@ -78,6 +78,7 @@ Tests never use the network: every TCP probe goes to a closed local port
 | `CPDEPLOY_GITHUB_API` | The GitHub API base URL (a `FakeGitHub`) |
 | `CPDEPLOY_HTTP_OVERRIDE` | `host:port` that health-check and release-marker requests go to, over plain HTTP |
 | `CPDEPLOY_TEST_ANSWERS` | A JSON list of answers: the CLI uses a `ScriptedAsker` and counts as interactive (an answer may be `["label fragment", value]`) |
+| `CPDEPLOY_TEST_FAIL_CREATE` | `shared`, `database`, `env` or `site.yml`: the wizard's Create fails at that step (S-31) |
 
 ## Deploy scenarios (`tests/Support/DeployScenario.php`)
 
@@ -102,7 +103,7 @@ CLI against:
   every request, like Apache.
 
 The site is a hand-written `site.yml` (`writeSite()`) and `shared/.env`
-(`writeEnv()`).
+(`writeEnv()`); the wizard tests start without them.
 
 Interruption tests (`RecoveryTest`) really kill a running deploy: with
 `CPD_STATE_FILE` pointing at the site's `.deploy-state.json`, `CPD_FAKE_NPM=kill`
@@ -118,6 +119,17 @@ answer is a `[label fragment, value]` pair, so a question asked out of order
 fails with the screen so far and the questions asked. `less` is a fake that
 copies what it would show to `$CPD_PAGED`, and the editor (`$EDITOR`) is a fake
 that appends `$CPD_EDIT_LINE` to the file.
+
+## Wizard tests (`tests/Scenario/WizardTest.php`)
+
+The add-site wizard runs in-process like the menus, on the deploy-scenario
+fixtures with the hand-written site removed, plus a `FakeGitHub` (repos,
+branches, deploy keys). They cover the token path with a new database (S-29),
+cancel after the key was added (S-30), a failed Create (S-31), `add --from`
+without a token run twice through the real CLI (S-35, ending in a deploy), and
+the import of a `cpanel-git-setup.sh` site with a fake `crontab` and a first
+deploy (S-39). The fake `uapi` answers MySQL writes with success and records
+their arguments.
 
 ## Real Laravel (`tests/RealLaravel`)
 

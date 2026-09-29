@@ -6,6 +6,7 @@ namespace Cpdeploy\Menus;
 
 use Cpdeploy\Commands\DeployCommand;
 use Cpdeploy\Deploy\DeployFlags;
+use Cpdeploy\Deploy\DeployResult;
 use Cpdeploy\Git\Commit;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
@@ -31,7 +32,10 @@ final class DeployScreen
     {
     }
 
-    public function deploy(string $site, DeployFlags $flags = new DeployFlags()): void
+    /**
+     * The result of the deploy that finished, or null (cancelled, or Back after a failure).
+     */
+    public function deploy(string $site, DeployFlags $flags = new DeployFlags()): ?DeployResult
     {
         while (true) {
             $this->ctx->title($site, 'Deploy');
@@ -40,17 +44,17 @@ final class DeployScreen
                 DeployCommand::report($result, $this->ctx->output, $this->ctx->theme);
                 $this->ctx->pause();
 
-                return;
+                return $result;
             } catch (CpdeployException $e) {
                 if ($e->errorCode === ErrorCode::CANCELLED) {
                     $this->ctx->line($e->getMessage());
 
-                    return;
+                    return null;
                 }
                 $this->ctx->error($e);
                 $next = $this->failure($site, $e, $flags);
                 if ($next === null) {
-                    return;
+                    return null;
                 }
                 $flags = $next;
             }

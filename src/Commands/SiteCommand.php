@@ -29,7 +29,7 @@ abstract class SiteCommand extends Command
         }
         $names = $this->services->sites()->names();
         if ($names === []) {
-            throw new CpdeployException(ErrorCode::USAGE, 'No sites are set up yet', 'Add one first (cpdeploy add arrives in a later version).');
+            throw new CpdeployException(ErrorCode::USAGE, 'No sites are set up yet', 'Add one first: cpdeploy add');
         }
         if (!$this->services->isInteractive($input)) {
             throw new CpdeployException(ErrorCode::USAGE, 'Which site? Pass the site name', 'Sites: ' . implode(', ', $names));

@@ -35,6 +35,11 @@ interface Asker
 
     public function password(string $label, string $hint = ''): string;
 
+    /**
+     * Several lines of text (e.g. a pasted .env).
+     */
+    public function textarea(string $label, string $default = '', string $hint = ''): string;
+
     public function confirm(string $label, bool $default = true, string $hint = ''): bool;
 
     public function pause(string $message = 'Press Enter to continue'): void;
