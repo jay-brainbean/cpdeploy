@@ -73,7 +73,7 @@ fi
 
 # --- 2. find the Tool PHP (same rules as the launcher, LCH-01…03) ------------------
 php_ok() {
-    [ -n "$1" ] && [ -x "$1" ] || return 1
+    if [ -z "$1" ] || [ ! -x "$1" ]; then return 1; fi
     # shellcheck disable=SC2086
     "$1" ${CPDEPLOY_PHP_ARGS:-} -r 'exit(PHP_VERSION_ID >= 80100 && extension_loaded("phar") && extension_loaded("mbstring") ? 0 : 1);' >/dev/null 2>&1
 }
@@ -132,7 +132,9 @@ else
             if [ -f "$guess" ]; then PHAR="$guess"; break; fi
         done
     fi
-    [ -n "$PHAR" ] && [ -f "$PHAR" ] || fail "no cpdeploy.phar given" "bash install.sh ./cpdeploy.phar, or bash install.sh --download" 2
+    if [ -z "$PHAR" ] || [ ! -f "$PHAR" ]; then
+        fail "no cpdeploy.phar given" "bash install.sh ./cpdeploy.phar, or bash install.sh --download" 2
+    fi
     if [ -z "$SHA256" ] && [ -f "$PHAR.sha256" ]; then
         SHA256="$(awk '{print $1; exit}' "$PHAR.sha256")"
     fi

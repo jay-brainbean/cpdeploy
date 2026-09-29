@@ -10,7 +10,7 @@ CPD_CACHE="$CPD_APP/.php-path"
 
 # LCH-01 acceptance test for one candidate.
 cpd_php_ok() {
-    [ -n "$1" ] && [ -x "$1" ] || return 1
+    if [ -z "$1" ] || [ ! -x "$1" ]; then return 1; fi
     # shellcheck disable=SC2086,SC2016
     "$1" $CPDEPLOY_PHP_ARGS -r 'exit(PHP_VERSION_ID >= 80100 && extension_loaded("phar") && extension_loaded("mbstring") ? 0 : 1);' >/dev/null 2>&1
 }
