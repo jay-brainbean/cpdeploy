@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cpdeploy\Deploy\Steps;
 
 use Cpdeploy\Config\Paths;
+use Cpdeploy\Config\SiteConfig;
 use Cpdeploy\Deploy\DeployContext;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
@@ -42,13 +43,23 @@ final class LinkSharedStep implements Step
 
     public function run(DeployContext $ctx): string
     {
-        $release = $ctx->releaseDir();
-        $shared = $this->paths->sharedDir($ctx->name());
+        return self::summary($this->linkRelease($ctx->site, $ctx->releaseDir()));
+    }
+
+    /**
+     * Links $release's shared paths (REL-01, REL-03, REL-04). Idempotent, so a
+     * rollback can re-link its target (RB-06). Returns the linked paths.
+     *
+     * @return list<string>
+     */
+    public function linkRelease(SiteConfig $site, string $release): array
+    {
+        $shared = $this->paths->sharedDir($site->name());
         $this->fs->ensureDir($shared, Paths::MODE_ROOT);
         $linked = [];
 
         try {
-            foreach ($ctx->site->sharedDirs() as $dir) {
+            foreach ($site->sharedDirs() as $dir) {
                 $target = $shared . '/' . $dir;
                 $inRelease = $release . '/' . $dir;
                 if (!is_dir($target)) {
@@ -63,11 +74,11 @@ final class LinkSharedStep implements Step
                 $this->replaceWithLink($inRelease, $target);
                 $linked[] = $dir;
             }
-            foreach ($ctx->site->sharedFiles() as $file) {
+            foreach ($site->sharedFiles() as $file) {
                 $this->replaceWithLink($release . '/' . $file, $shared . '/' . $file);
                 $linked[] = $file;
             }
-            if ($ctx->site->isLaravel()) {
+            if ($site->isLaravel()) {
                 foreach (['storage/framework/views', 'bootstrap/cache'] as $dir) {
                     if (!is_dir($release . '/' . $dir)) {
                         $this->fs->ensureDir($release . '/' . $dir, Paths::MODE_PUBLIC_DIR);
@@ -78,11 +89,14 @@ final class LinkSharedStep implements Step
             throw new CpdeployException(ErrorCode::SHARED, "Couldn't link a shared path: " . $e->getMessage(), 'See the log.');
         }
 
-        return self::summary($linked);
+        return $linked;
     }
 
     private function replaceWithLink(string $inRelease, string $target): void
     {
+        if (is_link($inRelease) && Fs::normalize(dirname($inRelease) . '/' . (string) readlink($inRelease)) === Fs::normalize($target)) {
+            return; // already linked
+        }
         if (is_link($inRelease) || file_exists($inRelease)) {
             $this->fs->deleteTree($inRelease);
         }

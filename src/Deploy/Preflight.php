@@ -10,7 +10,9 @@ use Cpdeploy\Cpanel\QuotaService;
 use Cpdeploy\Database\DbCheck;
 use Cpdeploy\Database\DbCheckResult;
 use Cpdeploy\Docroot\DocrootManager;
+use Cpdeploy\Docroot\HandlerBlock;
 use Cpdeploy\Env\EnvFile;
+use Cpdeploy\Git\GitRepository;
 use Cpdeploy\Laravel\AppKey;
 use Cpdeploy\Laravel\Maintenance;
 use Cpdeploy\Project\ComposerInspector;
@@ -19,6 +21,7 @@ use Cpdeploy\Runtime\PhpService;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Support\Fs;
+use Cpdeploy\Support\LineDiff;
 use Cpdeploy\Support\Masker;
 use Cpdeploy\Ui\Format;
 use Throwable;
@@ -27,7 +30,7 @@ use Throwable;
  * Preflight checks (§11.2): nothing has changed yet. Blocking problems are all
  * listed together and stop the deploy with exit 3; warnings are shown and the
  * deploy continues. PRE-01…06 run earlier in the Deployer, PRE-14 (database)
- * after the questions, PRE-17/18 arrive with M4.
+ * after the questions. PRE-17/18 (drift) run once nothing blocks.
  */
 final class Preflight
 {
@@ -44,6 +47,8 @@ final class Preflight
         private readonly ComposerInspector $composer,
         private readonly QuotaService $quota,
         private readonly DbCheck $db,
+        private readonly GitRepository $git,
+        private readonly ReleaseManifest $manifest,
     ) {
     }
 
@@ -151,8 +156,10 @@ final class Preflight
             $ctx->reporter->info(sprintf('Domain will switch from %s to %s at go-live', $ctx->domainPhpTag, $php->tag()));
         }
 
-        // PRE-21: keep a PHP handler block changed in cPanel's MultiPHP Manager (DOC-04).
+        // PRE-21: REL-06 docroot extras resync, and keep a PHP handler block changed in
+        // cPanel's MultiPHP Manager (DOC-04).
         if ($blocks === []) {
+            $this->resyncDocrootFiles($ctx);
             $served = $this->docroots->servedFolder($site);
             if (is_dir($served)) {
                 $this->docroots->captureHandler($site, $served);
@@ -173,6 +180,125 @@ final class Preflight
         if ($blocks !== []) {
             throw self::combine($blocks);
         }
+
+        // PRE-17 / PRE-18: only once nothing blocks, so the question isn't wasted.
+        $this->htaccessDrift($ctx);
+        $this->filesDrift($ctx);
+    }
+
+    /**
+     * REL-06: cPanel (e.g. the MultiPHP INI Editor) replaced a linked docroot file
+     * in the live release with a real file. It is newer than shared's copy, so it
+     * goes into shared before the build links it again.
+     */
+    private function resyncDocrootFiles(DeployContext $ctx): void
+    {
+        $live = $ctx->live;
+        $site = $ctx->site;
+        if ($live === null) {
+            return;
+        }
+        $web = $live->webPath($site->webDir());
+        foreach ($site->docrootFiles() as $file) {
+            $path = $web . '/' . $file;
+            if (!is_file($path) || is_link($path)) {
+                continue;
+            }
+            // A file the repo provides isn't a cPanel change.
+            $inRepo = ($site->webDir() === '' ? '' : $site->webDir() . '/') . $file;
+            if ($live->commit() !== null && $this->git->exists($ctx->mirror(), $live->commit(), $inRepo)) {
+                continue;
+            }
+            $shared = $this->paths->sharedDocrootDir($site->name());
+            $this->fs->ensureDir($this->paths->sharedDir($site->name()), Paths::MODE_ROOT);
+            $this->fs->ensureDir($shared, Paths::MODE_ROOT);
+            $this->fs->writeAtomic($shared . '/' . $file, (string) file_get_contents($path), Paths::MODE_PUBLIC_FILE);
+            $ctx->note("docroot: {$file} copied from the live release into shared (it was replaced by a real file, e.g. by cPanel)");
+        }
+    }
+
+    /**
+     * PRE-17 (DOC-05): the live <web_dir>/.htaccess differs from git (handler
+     * blocks aside) — cPanel Redirects, Hotlink Protection, Directory Privacy or a
+     * manual edit. Interactive: continue, show the diff, or cancel. Otherwise a
+     * warning, with the diff in the log.
+     */
+    private function htaccessDrift(DeployContext $ctx): void
+    {
+        $live = $ctx->live;
+        if ($live === null || $live->commit() === null) {
+            return;
+        }
+        $relative = ($ctx->site->webDir() === '' ? '' : $ctx->site->webDir() . '/') . '.htaccess';
+        $file = $live->dir . '/' . $relative;
+        $onServer = is_file($file) && !is_link($file) ? (string) file_get_contents($file) : '';
+        $inGit = $this->git->show($ctx->mirror(), $live->commit(), $relative) ?? '';
+        $normal = static fn (string $text): string => trim(str_replace("\r\n", "\n", HandlerBlock::strip($text)));
+        if ($normal($onServer) === $normal($inGit)) {
+            return;
+        }
+        $diff = LineDiff::lines($normal($inGit), $normal($onServer)) ?? ['(too large to show)'];
+        $message = "{$relative} on the live site was changed outside git (cPanel Redirects, Hotlink Protection, Directory Privacy or a manual edit). The new release has the version from the repo, so these changes will be lost.";
+        $ctx->log?->write("PRE-17 {$relative} differs from git (- git, + live):");
+        foreach ($diff as $line) {
+            $ctx->log?->write('  ' . $line);
+        }
+        if (!$ctx->asker->interactive() || $ctx->flags->yes) {
+            $ctx->warn($message . ' The difference is in the log.');
+
+            return;
+        }
+        $ctx->reporter->warn($message);
+        while (true) {
+            $choice = $ctx->asker->select(
+                "{$relative} was changed on the live site",
+                ['continue' => 'Continue (these changes will be lost)', 'diff' => 'Show diff', 'cancel' => 'Cancel (commit them to the repo first)'],
+                'diff',
+            );
+            if ($choice === 'continue') {
+                $ctx->warnings[] = $message;
+                $ctx->log?->write('WARNING: ' . $message . ' (continued)');
+
+                return;
+            }
+            if ($choice === 'cancel') {
+                throw new CpdeployException(ErrorCode::CANCELLED, 'Cancelled — your live site was not changed', "Commit the changes to {$relative} in the repo, then deploy again.");
+            }
+            $ctx->reporter->info("{$relative}: - in git, + on the live site");
+            foreach ($diff as $line) {
+                $ctx->reporter->info('  ' . $line);
+            }
+        }
+    }
+
+    /**
+     * PRE-18 (DOC-06): files changed or added in the live release since it was built.
+     */
+    private function filesDrift(DeployContext $ctx): void
+    {
+        $live = $ctx->live;
+        if ($live === null || !ReleaseManifest::exists($live->dir)) {
+            return;
+        }
+        // .htaccess is DOC-05's; docroot files are shared, and resynced by REL-06.
+        $web = $ctx->site->webDir() === '' ? '' : $ctx->site->webDir() . '/';
+        $drift = $this->manifest->drift($live->dir, [$web . '.htaccess', ...array_map(static fn (string $f): string => $web . $f, $ctx->site->docrootFiles())]);
+        if ($drift === null) {
+            $ctx->note('live-files check skipped: it would take longer than ' . (int) ReleaseManifest::BUDGET . ' s');
+
+            return;
+        }
+        $files = [...$drift['changed'], ...array_map(static fn (string $f): string => $f . ' (new)', $drift['added'])];
+        if ($files === []) {
+            return;
+        }
+        $shown = array_slice($files, 0, ReleaseManifest::LIST);
+        $more = count($files) - count($shown);
+        $ctx->warn(sprintf(
+            'Files changed directly on the server since the last deploy (they will not be in the new release): %s%s',
+            implode(', ', $shown),
+            $more > 0 ? " and {$more} more" : '',
+        ));
     }
 
     /**

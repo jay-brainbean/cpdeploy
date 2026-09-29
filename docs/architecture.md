@@ -81,18 +81,19 @@ Adapters       Support/Shell, Support/Http, Support/Fs, Cpanel/Uapi, GitHub/…
 
 ```text
 deploy(site, DeployFlags, Asker, Reporter)
- ├─ lock (LCK-01) · refuse an interrupted state (M4 recovers it) · open the log
+ ├─ lock (LCK-01) · Recovery::beforeOperation (REC-01) · open the log
  ├─ Phase A  nothing live changes
  │    site.yml → domain IP → fetch/clone mirror → resolve ref → ChangeAnalyzer
  │    → same commit / rewind guards → runtimes (PhpService, ComposerInstaller,
- │    NodeResolver/Installer) → Preflight → PlanBuilder (questions) → DB check
- │    → confirm
+ │    NodeResolver/Installer) → Preflight (incl. REL-06 resync, PRE-17/18 drift)
+ │    → PlanBuilder (questions) → DB check → confirm
  ├─ Phase B  Builder: Steps/Export → LinkShared → DocrootFiles → Composer
  │           → FrontendBuild → StorageLink → Optimize → custom → B9 migration
- │           check → B10 marker + ready            (only the new release changes)
+ │           check → B10 manifest + marker + ready  (only the new release changes)
  ├─ Phase C  GoLive: G1 down(L) → G2 migrate → G3 seed → G4 MultiPHP ↑
  │           → G5 switch current → G6 docroot → G7 MultiPHP ↓ → G8 up(N)
  │           (one Signals::critical() section) → G9 → G10 after-activate → G11 health
+ ├─ HC-03    health failed: ask / rollback / keep (NI-04) → Rollback::run() to L
  └─ Phase D  Finisher: prune, logs, tmp, history.jsonl; state file removed
 ```
 
@@ -107,3 +108,34 @@ deploy(site, DeployFlags, Asker, Reporter)
   MultiPHP change, put `current` back) before it reports.
 - `Deploy/SiteStatus` gives `status`, `releases` (and later the main menu) the
   same read-only view of sites and releases.
+- `Deploy/ReleaseManifest` writes `.release-manifest` at B10 and finds files
+  changed on the server at the next preflight (DOC-06). `Support/LineDiff`
+  shows the `.htaccess` drift (DOC-05) without an external `diff`.
+
+## Rollback (`Deploy/Rollback`)
+
+```text
+rollback(site, id | --previous | picker, …)       the `rollback` command
+ ├─ lock · Recovery::beforeOperation · target (RB-02) · log
+ ├─ prepare()  target PHP from .release.json (RB-03), domain PHP, risks (RB-04)
+ ├─ confirm (RB-05)
+ └─ run()      state file (operation rollback):
+               relink shared + docroot files, handler block for the target PHP
+               → optimize (target PHP; a failure changes nothing, exit 8)
+               → up(target) → [MultiPHP ↑] → switch current → [MultiPHP ↓]
+               → health check (switch back offered on a terminal) → history
+```
+
+A deploy whose health check fails calls `prepare()` + `run()` itself, since it
+already holds the lock; it writes the deploy's history entry, then the
+rollback's.
+
+## Recovery (`Deploy/Recovery`)
+
+A state file with the lock free is an interrupted operation (REC-01).
+`beforeOperation()` runs at the start of deploy and rollback (and `releases`
+changes refuse to run): it recovers with `--recover` (deploy), `--yes`
+(rollback), or when the user agrees on a terminal; otherwise E_INTERRUPTED
+(exit 11). `recoverLocked()` acts on the recorded phase (§11.9) — every action is
+idempotent, and the statuses are always re-derived from where `current` points —
+then writes its own log and a `recover` history entry (REC-03).

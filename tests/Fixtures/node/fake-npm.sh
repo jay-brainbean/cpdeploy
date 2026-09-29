@@ -2,6 +2,7 @@
 # Fake npm for cpdeploy scenario tests (plan §16.2).
 #   CPD_FAKE_NPM=fail  → the build fails
 #   CPD_FAKE_NPM=oom   → the build runs out of memory (V8 heap message)
+#   CPD_FAKE_NPM=kill  → kill -9 the running cpdeploy (its PID is in $CPD_STATE_FILE)
 case "$1" in
   ci|install)
     mkdir -p node_modules/.bin
@@ -11,6 +12,12 @@ case "$1" in
     if [ "$CPD_FAKE_NPM" = "fail" ]; then
       echo "vite v6.0.0 building for production..."
       echo "error during build: [vite]: Rollup failed to resolve import \"missing\""
+      exit 1
+    fi
+    if [ "$CPD_FAKE_NPM" = "kill" ]; then
+      pid=$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$CPD_STATE_FILE")
+      # Never 0 or empty: that would signal the whole process group.
+      [ -n "$pid" ] && [ "$pid" -gt 1 ] && kill -9 "$pid"
       exit 1
     fi
     if [ "$CPD_FAKE_NPM" = "oom" ]; then

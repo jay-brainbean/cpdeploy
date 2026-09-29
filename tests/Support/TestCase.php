@@ -7,6 +7,7 @@ namespace Cpdeploy\Tests\Support;
 use Cpdeploy\Services;
 use Cpdeploy\Support\Environment;
 use PHPUnit\Framework\TestCase as BaseTestCase;
+use Symfony\Component\Process\Exception\ProcessSignaledException;
 use Symfony\Component\Process\Process;
 
 /**
@@ -253,10 +254,16 @@ abstract class TestCase extends BaseTestCase
             $env[$key] ??= false;
         }
         $process = new Process($command, $this->tmp, $env, $stdin, $timeout);
-        $process->run();
+        try {
+            $process->run();
+            $exit = (int) $process->getExitCode();
+        } catch (ProcessSignaledException $e) {
+            // Killed on purpose by an interruption test: report it like a shell (128 + signal).
+            $exit = 128 + $e->getSignal();
+        }
 
         return [
-            'exit' => (int) $process->getExitCode(),
+            'exit' => $exit,
             'stdout' => $process->getOutput(),
             'stderr' => $process->getErrorOutput(),
         ];

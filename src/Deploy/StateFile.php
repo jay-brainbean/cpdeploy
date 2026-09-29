@@ -25,6 +25,12 @@ final class StateFile
     public const SWITCHED = 'switched';
     public const FINISHING = 'finishing';
 
+    /** Rollback phases (§8.7): preparing, then multiphp, switching, switched, finishing. */
+    public const PREPARING = 'preparing';
+
+    public const DEPLOY = 'deploy';
+    public const ROLLBACK = 'rollback';
+
     /** @var array<string, mixed> */
     private array $data = [];
 
