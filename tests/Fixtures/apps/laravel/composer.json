@@ -1,0 +1,11 @@
+{
+    "name": "acme/shop",
+    "type": "project",
+    "require": {
+        "php": "^8.1",
+        "laravel/framework": "^12.0"
+    },
+    "scripts": {
+        "post-autoload-dump": ["@php artisan package:discover --ansi"]
+    }
+}

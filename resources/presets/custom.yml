@@ -1,0 +1,17 @@
+# Custom preset (plan §8.4): the user defines the steps. Merged under site.yml.
+steps:
+  composer_install: off
+  frontend_build: off
+  storage_link: off
+  optimize: off
+  migrate: off
+  maintenance: off
+  seed: off
+  queue_restart: off
+node:
+  build_outputs: []
+shared:
+  files: []
+  dirs: []
+  docroot_files: []
+  docroot_dirs: [.well-known]

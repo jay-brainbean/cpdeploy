@@ -38,8 +38,23 @@ final class Shell
         private readonly Environment $environment,
         private readonly Masker $masker,
         private readonly Signals $signals,
-        private readonly ?Log $log = null,
+        private ?Log $log = null,
     ) {
+    }
+
+    /**
+     * Sends every later command and its output to $log (SH-04), for the rest of
+     * the operation; null detaches it. Every service shares this runner, so one
+     * call covers them all.
+     */
+    public function attachLog(?Log $log): void
+    {
+        $this->log = $log;
+    }
+
+    public function log(): ?Log
+    {
+        return $this->log;
     }
 
     /**

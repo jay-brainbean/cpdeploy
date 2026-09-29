@@ -64,3 +64,46 @@ Adapters       Support/Shell, Support/Http, Support/Fs, Cpanel/Uapi, GitHub/…
 - `deleteTree()` never follows a symlink, only deletes inside `tmp/`, `tools/`
   or a site's `releases/`, refuses the live release, and refuses any path
   reached through a symlinked folder (FS-03).
+
+## Sites and releases
+
+- `Config/SiteRegistry` loads `site.yml`: schema migration, then §8.2 defaults
+  ← the type's preset (`Config/Presets`, `resources/presets/*.yml`) ← the
+  file, then validation (`Schema/SiteSchema`, VAL-01…12, SEC-11). The result is
+  an immutable `SiteConfig`; `with()` + `save()` change it.
+- `Deploy/ReleaseManager` creates `releases/<id>` folders, reads and writes
+  `.release.json` (`Release`), finds the live release through `current`, and
+  prunes (PR-01) through `Fs::deleteTree()`.
+- `Deploy/StateFile` is `.deploy-state.json`, written before every step that can
+  touch the live site (INV-08).
+
+## The deploy engine (`Deploy/Deployer`)
+
+```text
+deploy(site, DeployFlags, Asker, Reporter)
+ ├─ lock (LCK-01) · refuse an interrupted state (M4 recovers it) · open the log
+ ├─ Phase A  nothing live changes
+ │    site.yml → domain IP → fetch/clone mirror → resolve ref → ChangeAnalyzer
+ │    → same commit / rewind guards → runtimes (PhpService, ComposerInstaller,
+ │    NodeResolver/Installer) → Preflight → PlanBuilder (questions) → DB check
+ │    → confirm
+ ├─ Phase B  Builder: Steps/Export → LinkShared → DocrootFiles → Composer
+ │           → FrontendBuild → StorageLink → Optimize → custom → B9 migration
+ │           check → B10 marker + ready            (only the new release changes)
+ ├─ Phase C  GoLive: G1 down(L) → G2 migrate → G3 seed → G4 MultiPHP ↑
+ │           → G5 switch current → G6 docroot → G7 MultiPHP ↓ → G8 up(N)
+ │           (one Signals::critical() section) → G9 → G10 after-activate → G11 health
+ └─ Phase D  Finisher: prune, logs, tmp, history.jsonl; state file removed
+```
+
+- Every run shares one `DeployContext` (site, commit, live and new release,
+  runtimes, plan, reporter). Steps implement `Steps/Step` and are run by
+  `StepRunner`, which reports start/succeed/fail and records durations.
+- Commands in the release run with a per-run shim folder first on PATH
+  (`Runtime/Shims`: `php` → site PHP, `composer` → site PHP + phar), so every
+  `php` and `@php` uses the site's PHP (BLD-01).
+- A failure in Phase B marks the release failed and leaves `current` alone. In
+  Phase C each step undoes what the earlier ones did (bring L back up, revert the
+  MultiPHP change, put `current` back) before it reports.
+- `Deploy/SiteStatus` gives `status`, `releases` (and later the main menu) the
+  same read-only view of sites and releases.

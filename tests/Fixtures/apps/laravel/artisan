@@ -1,0 +1,105 @@
+#!/usr/bin/env php
+<?php
+// Fake artisan for cpdeploy scenario tests (plan §16.2). The "database" is
+// storage/app/.fake-db.json (shared storage, so it survives releases); every call
+// is logged to storage/logs/fake-artisan.log with the PHP that ran it.
+$base = __DIR__;
+$args = array_values(array_filter(array_slice($argv, 1), static fn ($a) => !in_array($a, ['--no-interaction', '--ansi', '--no-ansi'], true)));
+$cmd = $args[0] ?? 'list';
+$opts = array_slice($args, 1);
+
+@file_put_contents($base . '/storage/logs/fake-artisan.log', json_encode([
+    'cmd' => $cmd,
+    'args' => $opts,
+    'php' => getenv('CPD_FAKE_PHP') ?: 'real',
+    'release' => basename((string) realpath($base)),
+]) . "\n", FILE_APPEND);
+
+$dbFile = $base . '/storage/app/.fake-db.json';
+$ran = is_file($dbFile) ? (json_decode((string) file_get_contents($dbFile), true) ?: []) : null;
+$files = [];
+foreach (glob($base . '/database/migrations/*.php') ?: [] as $f) {
+    $files[basename($f, '.php')] = $f;
+}
+ksort($files);
+$pending = array_values(array_diff(array_keys($files), $ran ?? []));
+
+switch ($cmd) {
+    case 'package:discover':
+        echo "Discovering packages.\n";
+        exit(0);
+    case 'storage:link':
+        if (is_link($base . '/public/storage')) {
+            echo "ERROR  The [public/storage] link already exists.\n";
+            exit(0);
+        }
+        symlink('../storage/app/public', $base . '/public/storage');
+        echo "INFO  The [public/storage] link has been connected to [storage/app/public].\n";
+        exit(0);
+    case 'optimize':
+        if (getenv('CPD_FAKE_OPTIMIZE_FAIL')) {
+            echo "LogicException: Unable to prepare route [api/user] for serialization. Uses Closure.\n";
+            exit(1);
+        }
+        @mkdir($base . '/bootstrap/cache', 0755, true);
+        file_put_contents($base . '/bootstrap/cache/config.php', "<?php return ['base_path' => " . var_export((string) realpath($base), true) . "];\n");
+        echo "Caching framework bootstrap, configuration, and metadata.\n";
+        exit(0);
+    case 'migrate:status':
+        if ($ran === null) {
+            echo "\n   ERROR  Migration table not found.  \n\n";
+            exit(1);
+        }
+        $pendingOpt = null;
+        foreach ($opts as $o) {
+            if (str_starts_with($o, '--pending')) {
+                $pendingOpt = (int) (explode('=', $o, 2)[1] ?? 0);
+            }
+        }
+        if ($pending === []) {
+            echo "\n   INFO  No pending migrations.  \n\n";
+            exit(0);
+        }
+        echo "\n  Migration name .............................................. Batch / Status  \n";
+        foreach ($pending as $name) {
+            echo '  ' . $name . ' .............................................. Pending  ' . "\n";
+        }
+        exit($pendingOpt ?? 0);
+    case 'migrate':
+        $ran ??= [];
+        foreach ($pending as $name) {
+            if (str_contains((string) file_get_contents($files[$name]), 'FAKE_FAIL')) {
+                file_put_contents($dbFile, json_encode($ran));
+                echo "  {$name} ........ FAIL\n  SQLSTATE[42S01]: Base table or view already exists\n";
+                exit(1);
+            }
+            $ran[] = $name;
+            echo "  {$name} ........ DONE\n";
+        }
+        file_put_contents($dbFile, json_encode($ran));
+        exit(0);
+    case 'down':
+        @mkdir($base . '/storage/framework', 0755, true);
+        file_put_contents($base . '/storage/framework/down', json_encode(['retry' => 60]));
+        file_put_contents($base . '/storage/framework/maintenance.php', "<?php\n");
+        echo "INFO  Application is now in maintenance mode.\n";
+        exit(0);
+    case 'up':
+        if (!is_file($base . '/storage/framework/down')) {
+            echo "INFO  Application is already up.\n";
+            exit(0);
+        }
+        @unlink($base . '/storage/framework/down');
+        @unlink($base . '/storage/framework/maintenance.php');
+        echo "INFO  Application is now live.\n";
+        exit(0);
+    case 'db:seed':
+        echo "INFO  Seeding database.\n";
+        exit(0);
+    case 'queue:restart':
+        echo "INFO  Broadcasting queue restart signal.\n";
+        exit(0);
+    default:
+        fwrite(STDERR, "Command \"{$cmd}\" is not defined.\n");
+        exit(1);
+}

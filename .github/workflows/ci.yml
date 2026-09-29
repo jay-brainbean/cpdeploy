@@ -100,6 +100,30 @@ jobs:
           name: cpdeploy-phar
           path: dist/
 
+  real-laravel:
+    # A real laravel/laravel app, real Composer and Node 22, SQLite; fakes only for
+    # uapi and the web server. First deploy, then a second with Composer skipped (§16.6).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pcntl, posix, pdo_sqlite, sqlite3
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: composer install --no-interaction --no-progress
+      - name: Create a laravel/laravel app
+        run: |
+          composer create-project laravel/laravel "$RUNNER_TEMP/laravel-app" --no-interaction --no-progress --prefer-dist
+          cd "$RUNNER_TEMP/laravel-app"
+          npm install --package-lock-only --no-audit --no-fund
+      - run: vendor/bin/phpunit --testsuite RealLaravel --fail-on-skipped
+        env:
+          CPDEPLOY_REAL_LARAVEL_APP: ${{ runner.temp }}/laravel-app
+
   ssh-integration:
     # A throwaway sshd on 127.0.0.1 accepts only a generated deploy key; git runs
     # through cpdeploy's GIT_SSH_COMMAND and known_hosts (GIT-02, GIT-06, SEC-04).

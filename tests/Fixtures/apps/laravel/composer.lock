@@ -1,0 +1,10 @@
+{
+    "_readme": ["Fixture lock for cpdeploy scenario tests"],
+    "content-hash": "fixture",
+    "packages": [
+        {"name": "laravel/framework", "version": "v12.31.0"},
+        {"name": "monolog/monolog", "version": "3.9.0"}
+    ],
+    "packages-dev": [],
+    "platform": {"php": "^8.1"}
+}

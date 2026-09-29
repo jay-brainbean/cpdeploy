@@ -68,6 +68,7 @@ final class Http
      *
      * @param array<string, string> $headers
      * @param array<string, string> $secretHeaders
+     * @param list<string>          $resolve `host:port:ip` entries (HTTP-03)
      */
     public function send(
         string $method,
@@ -76,8 +77,10 @@ final class Http
         array $headers = [],
         array $secretHeaders = [],
         float $timeout = 30,
+        array $resolve = [],
+        bool $insecure = false,
     ): HttpResponse {
-        return $this->request(strtoupper($method), $url, $headers, $secretHeaders, $body, $timeout, [], false, null, 1);
+        return $this->request(strtoupper($method), $url, $headers, $secretHeaders, $body, $timeout, $resolve, $insecure, null, 1);
     }
 
     /**
