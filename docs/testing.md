@@ -78,6 +78,7 @@ Tests never use the network: every TCP probe goes to a closed local port
 | `CPDEPLOY_GITHUB_API` | The GitHub API base URL (a `FakeGitHub`) |
 | `CPDEPLOY_HTTP_OVERRIDE` | `host:port` that health-check and release-marker requests go to, over plain HTTP |
 | `CPDEPLOY_TEST_ANSWERS` | A JSON list of answers: the CLI uses a `ScriptedAsker` and counts as interactive (an answer may be `["label fragment", value]`) |
+| `CPDEPLOY_TEST_VERSION` | The version self-update compares against (tests run from source, whose version is `dev`) |
 | `CPDEPLOY_TEST_FAIL_CREATE` | `shared`, `database`, `env` or `site.yml`: the wizard's Create fails at that step (S-31) |
 
 ## Deploy scenarios (`tests/Support/DeployScenario.php`)
@@ -130,6 +131,23 @@ without a token run twice through the real CLI (S-35, ending in a deploy), and
 the import of a `cpanel-git-setup.sh` site with a fake `crontab` and a first
 deploy (S-39). The fake `uapi` answers MySQL writes with success and records
 their arguments.
+
+## M7 tests
+
+- `RemoveTest`: *Remove site* after a real deploy — detach (S-33: the copy
+  serves the same app with no links back into the site folder), restore the
+  old folder (S-34), empty, a site that never went live, and the menu path with
+  the typed confirmation.
+- `CheckSiteTest`: the per-site group before and after a deploy, `--probe`
+  (the harness web server runs the PHP running the tests, so the probe reports
+  a mismatch except on PHP 8.2),
+  the `.env` mode fix, and `--refresh-host-keys` against `FakeGitHub`'s `/meta`.
+- `JsonOutputTest` (S-37): every `--json` document checked against
+  `resources/schemas/` with `tests/Support/JsonShape`, and stdout holding only
+  JSON.
+- `SelfUpdateTest`: releases served by `FakeGitHub` (`state.releases`, assets
+  under `<dir>/assets/`); the "phars" are small PHP scripts printing a version.
+- `SettingsMenuTest`: every Settings screen, and the defaults reaching new sites.
 
 ## Real Laravel (`tests/RealLaravel`)
 

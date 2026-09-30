@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Wizard;
 
+use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Schema\SiteSchema;
 use Cpdeploy\Config\SiteConfig;
 use Cpdeploy\Git\RepoUrl;
@@ -77,6 +78,13 @@ final class WizardState
     /** Existing database only; goes into .env, never into site.yml. */
     public ?string $dbPassword = null;
 
+    /**
+     * Settings → Defaults for new sites (§9.6), applied before any answer.
+     *
+     * @var array<string, mixed>
+     */
+    public array $defaults = [];
+
     // Step 9: site.yml paths changed in the steps editor.
     /** @var array<string, mixed> */
     public array $overrides = [];
@@ -124,11 +132,24 @@ final class WizardState
                 'user' => $this->dbUser,
             ];
         }
-        foreach ($this->overrides as $path => $value) {
+        foreach ([...$this->defaults, ...$this->overrides] as $path => $value) {
             $data = self::setPath($data, $path, $value);
         }
 
         return $data;
+    }
+
+    /**
+     * Settings → Defaults for new sites: keep releases, the health check and
+     * MultiPHP sync.
+     */
+    public function applyDefaults(GlobalConfig $config): void
+    {
+        $this->defaults = [
+            'releases.keep' => $config->defaultKeepReleases(),
+            'health_check.enabled' => $config->defaultFlag('health_check'),
+        ];
+        $this->syncMultiPhp = $config->defaultFlag('sync_multiphp');
     }
 
     /**

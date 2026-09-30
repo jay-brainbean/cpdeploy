@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Wizard;
 
+use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Presets;
 use Cpdeploy\Config\Schema\SiteSchema;
 use Cpdeploy\Config\SiteRegistry;
@@ -44,6 +45,7 @@ final class AddFromFile
         private readonly SiteRegistry $sites,
         private readonly Presets $presets,
         private readonly Environment $environment,
+        private readonly GlobalConfig $config,
     ) {
     }
 
@@ -51,6 +53,7 @@ final class AddFromFile
     {
         [$data, $setup] = self::read($file);
         $state = new WizardState();
+        $state->applyDefaults($this->config);
         $tx = new WizardTransaction();
         $this->fill($state, $data, $setup, dirname($file));
         $repo = $state->repo;
@@ -209,7 +212,9 @@ final class AddFromFile
         $php = is_array($data['php'] ?? null) ? $data['php'] : [];
         $state->phpVersion = is_scalar($php['version'] ?? null) && (string) $php['version'] !== '' ? (string) $php['version'] : null;
         $state->phpFamily = is_string($php['family'] ?? null) ? $php['family'] : 'ea';
-        $state->syncMultiPhp = !isset($php['sync_multiphp']) || $php['sync_multiphp'] === true;
+        if (isset($php['sync_multiphp'])) {
+            $state->syncMultiPhp = $php['sync_multiphp'] === true;
+        }
 
         $node = is_array($data['node'] ?? null) ? $data['node'] : [];
         $state->nodeVersion = is_scalar($node['version'] ?? null) ? (string) $node['version'] : 'auto';

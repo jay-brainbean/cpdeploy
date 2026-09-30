@@ -4,10 +4,10 @@ A menu-driven command-line tool that deploys GitHub repositories (Laravel
 first) to a cPanel account, building each deploy in its own release folder and
 switching the site over atomically.
 
-> **Status:** under development. Milestones M0–M6 are in place: the tool
-> installs, checks the server, adds sites with a wizard (or from a file),
-> deploys, rolls back and recovers them, and `cpdeploy` opens a menu to deploy
-> and manage them. The specification is
+> **Status:** release candidate. Milestones M0–M7 are in place: the tool
+> installs and updates itself, checks the server and your sites, adds sites
+> with a wizard (or from a file), deploys, rolls back, recovers and removes
+> them, and `cpdeploy` opens a menu for all of it. The specification is
 > [cpdeploy-development-plan.md](cpdeploy-development-plan.md).
 
 ## Requirements
@@ -49,8 +49,10 @@ To use a specific PHP for the tool, set `CPDEPLOY_PHP=/path/to/php`.
 ## Check your server
 
 ```sh
-cpdeploy check          # human-readable
-cpdeploy check --json   # for scripts
+cpdeploy check              # the server, then every site
+cpdeploy check shop         # the server and one site
+cpdeploy check shop --probe # also ask the domain which PHP it really serves
+cpdeploy check --json       # for scripts
 ```
 
 It checks, in groups:
@@ -64,10 +66,22 @@ It checks, in groups:
   Composer and Node.js download sites.
 - **GitHub:** the optional token (valid, whose, when it expires) and GitHub's
   SSH host keys.
+- **Site `<name>`:** the deploy key can read the repository, the site's PHP
+  and Node are installed, `shared/.env` exists with mode 600 (a wrong mode is
+  fixed if you say so, or with `--yes`), the domain's folder is cpdeploy's link,
+  the live release is healthy, shared folders are writable, no operation was
+  interrupted, maintenance mode is off, and with `--probe` the domain serves
+  the site's PHP version.
 
 Each line is ✓ (fine), ⚠ (works, with a limitation) or ✗ (must be fixed), with
 a hint. The command exits 3 when anything is ✗. Without a UTF-8 locale the
 symbols are `[ok]`, `[!]` and `[x]`.
+
+If GitHub ever changes its SSH host keys (git then fails with "Host key
+verification failed"), update cpdeploy, or run
+`cpdeploy check --refresh-host-keys`: it fetches the current keys from
+`api.github.com`, shows their fingerprints to compare with GitHub's
+documentation, and replaces `~/cpdeploy/known_hosts` once you confirm.
 
 ## GitHub token (optional)
 
@@ -292,7 +306,15 @@ Run `cpdeploy` on its own (in a terminal) for the menu:
   *Roll back…*, *Releases*, *PHP version*, *Node version*, *Deploy steps*,
   *Environment (.env)*, *Laravel tools*, *Branch*, *Deploy key*, *Composer
   credentials*, *Logs & history* and *Site info*;
-- *Logs & history* across all sites, and *Server check*.
+- *Manage a site → Remove site…* (below);
+- *Add a new site* (the wizard), *Logs & history* across all sites, *Server
+  check*, and *Settings*:
+  - *GitHub token*: set (checked with GitHub first), test, remove;
+  - *Defaults for new sites*: releases to keep, MultiPHP sync, health check;
+  - *Timeouts* for git, Composer, npm, artisan, migrations, custom commands and
+    HTTP;
+  - *Display*: symbols, colour, the editor;
+  - *Refresh GitHub host keys*, *About*, and *Check for updates*.
 
 Without a terminal, `cpdeploy` prints the command list. Every menu action has a
 command, below, and both do exactly the same thing.
@@ -339,11 +361,58 @@ cpdeploy config shop set releases.keep 8
 cpdeploy config shop edit       # opens site.yml in your editor, then validates it
 ```
 
+`status`, `releases`, `logs` and `check` accept `--json`. The output holds only
+the JSON document (progress goes to stderr) and always has `"schema": 1`; fields
+are only ever added. The shapes are in [resources/schemas/](resources/schemas).
+
 Exit codes: 0 done (or nothing to do), 2 an answer or valid setting is missing,
 3 a check failed, 4 the build failed, 5 a migration failed (the previous
 release is back up), 6 go-live failed, 7 the site didn't pass the health check
 after go-live (rolled back or kept, as described above), 8 a rollback failed,
-10 another operation is running, 11 an earlier operation was interrupted.
+10 another operation is running, 11 an earlier operation was interrupted,
+130 cancelled.
+
+## Remove a site
+
+```sh
+cpdeploy remove shop                            # asks (on a terminal)
+cpdeploy remove shop --detach --yes             # keep it running from ~/shop-app
+cpdeploy remove shop --restore-backup --yes     # put back the folder from before cpdeploy
+cpdeploy remove shop --empty --keep-key --yes   # leave an empty folder
+```
+
+First the domain's folder stops depending on cpdeploy; if that fails, nothing
+is removed. The choices:
+
+- **detach**: the live release is copied to `~/<site>-app` as ordinary files
+  (with `.env` and `storage/` copied in), and the domain points there. The site
+  keeps running without cpdeploy.
+- **restore-backup**: the folder that was there before the first deploy comes
+  back (only when that backup still exists).
+- **empty**: an empty folder, with only `.well-known`. The site goes offline.
+
+Then cpdeploy deletes the deploy key (on GitHub with a token, else it tells you
+where; `--keep-key` keeps it), the database and its user if cpdeploy created
+them and you ask (`--drop-db`; in the menu you type the database name), the
+releases and the repository copy. `.env` and uploads (`shared/`) and `site.yml`
+are moved to `~/cpdeploy/removed/<site>-<time>/` unless you choose to delete
+them (`--delete-shared`). Each removal is logged in
+`~/cpdeploy/removed/history.jsonl`. A site that never went live leaves its
+folder untouched. On a terminal the menu asks you to type the site name.
+
+## Update cpdeploy
+
+```sh
+cpdeploy self-update --check    # is there a newer version?
+cpdeploy self-update            # download, verify, switch
+cpdeploy self-update --rollback # back to the version before
+cpdeploy self-update --pre      # include release candidates
+```
+
+The new phar is checked against its published SHA-256 and started once before
+it replaces `~/cpdeploy/app/cpdeploy.phar`; the old one is kept as
+`cpdeploy.phar.prev`. A deploy that is running keeps using the old version. If
+the tool's repository is private, the GitHub token is used to download it.
 
 ## Uninstall
 
@@ -365,6 +434,7 @@ running; their data stays in `~/cpdeploy/sites`.
 | `~/cpdeploy/known_hosts` | GitHub's SSH host keys |
 | `~/.ssh/cpdeploy_<site>` | Each site's deploy key |
 | `~/cpdeploy/tools/` | Downloaded Composer and Node, shared by all sites |
+| `~/cpdeploy/removed/` | What *Remove site* kept (`shared/`, `site.yml`) and its history |
 | `~/cpdeploy/sites/<site>/` | `site.yml`, `releases/`, `current`, `shared/`, `backups/`, `logs/`, `history.jsonl` |
 | `<docroot>` | After the first deploy: a symlink to `~/cpdeploy/sites/<site>/current/<web_dir>` |
 

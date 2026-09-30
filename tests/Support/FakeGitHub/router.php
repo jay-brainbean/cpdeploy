@@ -43,6 +43,21 @@ $save = static function () use (&$state, $stateFile): void {
     file_put_contents($stateFile, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 };
 
+// Release assets (self-update): GET /assets/<file> with Accept: application/octet-stream.
+if (preg_match('#^/assets/([A-Za-z0-9._-]+)$#', $path, $am) === 1) {
+    $file = $root . '/assets/' . $am[1];
+    if (($_SERVER['HTTP_ACCEPT'] ?? '') !== 'application/octet-stream' || !is_file($file)) {
+        $send(404, ['message' => 'Not Found']);
+
+        return;
+    }
+    http_response_code(200);
+    header('Content-Type: application/octet-stream');
+    readfile($file);
+
+    return;
+}
+
 if (($_SERVER['HTTP_ACCEPT'] ?? '') !== 'application/vnd.github+json' || ($_SERVER['HTTP_X_GITHUB_API_VERSION'] ?? '') !== '2022-11-28') {
     $send(400, ['message' => 'Missing Accept or X-GitHub-Api-Version header']);
 
@@ -51,6 +66,21 @@ if (($_SERVER['HTTP_ACCEPT'] ?? '') !== 'application/vnd.github+json' || ($_SERV
 
 if ($path === '/meta') {
     $send(200, ['ssh_keys' => $state['meta_ssh_keys'] ?? []]);
+
+    return;
+}
+
+// Releases of the tool itself (self-update, no token needed): state.releases["owner/repo"]; "{base}" in
+// asset URLs becomes this server's address.
+if (preg_match('#^/repos/([^/]+)/([^/]+)/releases$#', $path, $rm) === 1) {
+    $list = $state['releases'][$rm[1] . '/' . $rm[2]] ?? null;
+    if ($list === null) {
+        $send(404, ['message' => 'Not Found']);
+
+        return;
+    }
+    $base = 'http://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+    $send(200, json_decode(str_replace('{base}', $base, (string) json_encode($list, JSON_UNESCAPED_SLASHES)), true));
 
     return;
 }

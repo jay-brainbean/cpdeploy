@@ -37,7 +37,9 @@ final class AddSiteWizard
      */
     public function run(): ?string
     {
-        $run = new WizardRun($this->ctx, new WizardState(), new WizardTransaction());
+        $state = new WizardState();
+        $state->applyDefaults($this->ctx->services->config());
+        $run = new WizardRun($this->ctx, $state, new WizardTransaction());
         /** @var array<int, WizardStep> $steps */
         $steps = [
             1 => new RepositoryStep(),

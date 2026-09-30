@@ -6,6 +6,7 @@ namespace Cpdeploy;
 
 use Cpdeploy\Check\ServerCheck;
 use Cpdeploy\Check\ServerCheckServices;
+use Cpdeploy\Check\SiteCheck;
 use Cpdeploy\Config\GlobalConfig;
 use Cpdeploy\Config\Paths;
 use Cpdeploy\Config\Presets;
@@ -34,6 +35,7 @@ use Cpdeploy\Deploy\ReleaseManager;
 use Cpdeploy\Deploy\ReleaseManifest;
 use Cpdeploy\Deploy\Rollback;
 use Cpdeploy\Deploy\SiteInfo;
+use Cpdeploy\Deploy\SiteRemover;
 use Cpdeploy\Deploy\SiteStatus;
 use Cpdeploy\Deploy\StepRunner;
 use Cpdeploy\Deploy\Steps\ComposerStep;
@@ -45,10 +47,12 @@ use Cpdeploy\Deploy\Steps\OptimizeStep;
 use Cpdeploy\Deploy\Steps\QueueRestartStep;
 use Cpdeploy\Deploy\Steps\SeedStep;
 use Cpdeploy\Deploy\Steps\StorageLinkStep;
+use Cpdeploy\Docroot\DocrootDetach;
 use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Env\EnvManager;
 use Cpdeploy\Git\DeployKeyService;
 use Cpdeploy\Git\GitRepository;
+use Cpdeploy\Git\HostKeyRefresh;
 use Cpdeploy\Git\HostKeys;
 use Cpdeploy\Git\MirrorService;
 use Cpdeploy\Git\SiteKeys;
@@ -91,6 +95,7 @@ use Cpdeploy\Ui\Reporter;
 use Cpdeploy\Ui\ScriptedAsker;
 use Cpdeploy\Ui\TaskReporter;
 use Cpdeploy\Ui\Theme;
+use Cpdeploy\Update\SelfUpdate;
 use Cpdeploy\Wizard\AddFromFile;
 use Cpdeploy\Wizard\LegacyImporter;
 use Cpdeploy\Wizard\RepoAccess;
@@ -178,6 +183,22 @@ final class Services
     public function config(): GlobalConfig
     {
         return $this->config ??= GlobalConfig::load($this->paths()->configFile(), $this->fs());
+    }
+
+    /**
+     * Settings (§9.6): changes config.yml (validated) and what this process uses.
+     *
+     * @param array<string, mixed> $changes dotted key => value
+     */
+    public function changeConfig(array $changes): GlobalConfig
+    {
+        $config = $this->config();
+        foreach ($changes as $path => $value) {
+            $config = $config->with($path, $value);
+        }
+        $config->save($this->paths()->configFile(), $this->fs());
+
+        return $this->config = $config;
     }
 
     public function presets(): Presets
@@ -382,6 +403,29 @@ final class Services
     public function docroots(): DocrootManager
     {
         return new DocrootManager($this->paths(), $this->fs(), $this->sites());
+    }
+
+    public function docrootDetach(): DocrootDetach
+    {
+        return new DocrootDetach($this->paths(), $this->fs(), $this->releases(), $this->docroots());
+    }
+
+    public function siteRemover(): SiteRemover
+    {
+        return new SiteRemover(
+            $this->paths(),
+            $this->fs(),
+            $this->clock(),
+            $this->system(),
+            $this->masker(),
+            $this->sites(),
+            $this->releases(),
+            $this->docroots(),
+            $this->docrootDetach(),
+            $this->deployKeys(),
+            $this->databases(),
+            fn (): GitHubApi => $this->github(),
+        );
     }
 
     public function changes(): ChangeAnalyzer
@@ -657,6 +701,7 @@ final class Services
             $this->sites(),
             $this->presets(),
             $this->environment,
+            $this->config(),
         );
     }
 
@@ -760,6 +805,38 @@ final class Services
             $this->hostKeys(),
             $this->clock(),
         ));
+    }
+
+    public function hostKeyRefresh(): HostKeyRefresh
+    {
+        return new HostKeyRefresh($this->hostKeys(), fn (): GitHubApi => $this->github(), $this->clock());
+    }
+
+    public function selfUpdate(): SelfUpdate
+    {
+        return new SelfUpdate(
+            $this->paths(),
+            $this->fs(),
+            $this->shell(),
+            fn (): GitHubApi => $this->github(),
+            $this->config()->updateRepo(),
+            $this->environment->testing('CPDEPLOY_TEST_VERSION') ?? Version::get(),
+        );
+    }
+
+    public function siteCheck(): SiteCheck
+    {
+        return new SiteCheck(
+            $this->paths(),
+            $this->fs(),
+            $this->sites(),
+            $this->releases(),
+            $this->docroots(),
+            $this->deployKeys(),
+            $this->php(),
+            $this->nodeResolver(),
+            $this->phpChange(),
+        );
     }
 
     public function theme(): Theme

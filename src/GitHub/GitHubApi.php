@@ -171,6 +171,38 @@ final class GitHubApi
         return is_array($data['ssh_keys'] ?? null) ? array_values(array_filter($data['ssh_keys'], 'is_string')) : [];
     }
 
+    /**
+     * UPD-01: the newest releases of the tool's repository (first page, newest
+     * first); the stored token is sent when there is one (a private tool repo).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function releases(string $owner, string $name): array
+    {
+        $rows = $this->json($this->get("/repos/{$owner}/{$name}/releases?per_page=30", "{$owner}/{$name}"));
+        $out = [];
+        foreach ($rows as $row) {
+            if (is_array($row) && is_string($row['tag_name'] ?? null)) {
+                /** @var array<string, mixed> $row */
+                $out[] = $row;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * UPD-02: a release asset through its API URL (works for private repos).
+     */
+    public function downloadAsset(string $url, string $file, float $timeout = 600): void
+    {
+        $response = $this->http->get($url, ['Accept' => 'application/octet-stream', 'X-GitHub-Api-Version' => self::API_VERSION], $this->auth(), $timeout, saveTo: $file);
+        if (!$response->ok()) {
+            @unlink($file);
+            $this->check($response, null, false);
+        }
+    }
+
     public static function isClassic(string $token): bool
     {
         return str_starts_with($token, 'ghp_');

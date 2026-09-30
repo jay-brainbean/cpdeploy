@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cpdeploy logs <site> --json",
+  "type": "object",
+  "required": ["schema", "site", "entries"],
+  "properties": {
+    "schema": {"const": 1},
+    "site": {"type": "string"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ts", "action", "result", "exit_code", "release", "from_release", "commit", "from_commit", "duration_s", "log", "user", "tool", "notes"],
+        "properties": {
+          "ts": {"type": "string"},
+          "action": {"type": "string"},
+          "result": {"type": "string"},
+          "exit_code": {"type": "integer"},
+          "release": {"type": ["string", "null"]},
+          "from_release": {"type": ["string", "null"]},
+          "commit": {"type": ["string", "null"]},
+          "from_commit": {"type": ["string", "null"]},
+          "duration_s": {"type": "integer"},
+          "log": {"type": ["string", "null"]},
+          "user": {"type": "string"},
+          "tool": {"type": "string"},
+          "notes": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

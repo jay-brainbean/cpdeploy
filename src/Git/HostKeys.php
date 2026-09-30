@@ -24,6 +24,9 @@ final class HostKeys
 
     public const HOSTS = ['github.com', '[ssh.github.com]:443'];
 
+    /** First line of a known_hosts refreshed from GitHub's API. */
+    public const REFRESHED = '# cpdeploy: refreshed';
+
     public function __construct(
         private readonly Fs $fs,
         private readonly string $installed,
@@ -53,7 +56,9 @@ final class HostKeys
     public function install(): void
     {
         $embedded = $this->embedded();
-        if (@file_get_contents($this->installed) !== $embedded) {
+        $installed = @file_get_contents($this->installed);
+        // A file refreshed from GitHub's API (--refresh-host-keys) is kept.
+        if ($installed !== $embedded && !(is_string($installed) && str_starts_with($installed, self::REFRESHED))) {
             $this->fs->writeAtomic($this->installed, $embedded, Paths::MODE_PUBLIC_FILE);
         }
     }
@@ -61,6 +66,42 @@ final class HostKeys
     public function installedMatches(): bool
     {
         return @file_get_contents($this->installed) === $this->embedded();
+    }
+
+    /**
+     * True when ~/cpdeploy/known_hosts came from --refresh-host-keys.
+     */
+    public function isRefreshed(): bool
+    {
+        $installed = @file_get_contents($this->installed);
+
+        return is_string($installed) && str_starts_with($installed, self::REFRESHED);
+    }
+
+    /**
+     * GIT-03 --refresh-host-keys: the known_hosts text for GitHub's current keys
+     * ("type base64" lines from GET /meta), for both hosts.
+     *
+     * @param list<string> $keys
+     */
+    public static function fromMeta(array $keys, string $at): string
+    {
+        $lines = [self::REFRESHED . ' ' . $at . ' from https://api.github.com/meta'];
+        foreach (self::HOSTS as $host) {
+            foreach ($keys as $key) {
+                $parts = preg_split('/\s+/', trim($key)) ?: [];
+                if (count($parts) >= 2 && preg_match('/^[a-z0-9@.-]+$/', $parts[0]) === 1 && preg_match('#^[A-Za-z0-9+/=]+$#', $parts[1]) === 1) {
+                    $lines[] = "{$host} {$parts[0]} {$parts[1]}";
+                }
+            }
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    public function write(string $knownHosts): void
+    {
+        $this->fs->writeAtomic($this->installed, $knownHosts, Paths::MODE_PUBLIC_FILE);
     }
 
     /**

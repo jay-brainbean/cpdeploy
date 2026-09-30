@@ -261,6 +261,9 @@ abstract class TestCase extends BaseTestCase
             // Killed on purpose by an interruption test: report it like a shell (128 + signal).
             $exit = 128 + $e->getSignal();
         }
+        // The CLI changed files behind this process's back; PHP < 8.3 would
+        // otherwise answer is_link() & co. from its stat cache.
+        clearstatcache();
 
         return [
             'exit' => $exit,

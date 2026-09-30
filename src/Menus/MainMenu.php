@@ -99,7 +99,7 @@ final class MainMenu
             case 'check':
                 $this->ctx->title('Server check');
                 $this->ctx->reporter->start('Checking the server');
-                $groups = $this->ctx->services->serverCheck()->run();
+                $groups = CheckCommand::groups($this->ctx->services);
                 $this->ctx->reporter->succeed('');
                 CheckCommand::render($groups, $this->ctx->output, $this->ctx->theme, $this->ctx->services->masker());
                 $this->ctx->pause();
@@ -108,11 +108,7 @@ final class MainMenu
                 (new AddSiteWizard($this->ctx))->run();
                 break;
             case 'settings':
-                $this->ctx->title('Settings');
-                $this->ctx->line('The settings screen is not available in this version yet. Meanwhile:');
-                $this->ctx->line('  GitHub token: cpdeploy token set | test | remove');
-                $this->ctx->line('  Everything else: ~/cpdeploy/config.yml (checked every time cpdeploy starts)');
-                $this->ctx->pause();
+                (new SettingsMenu($this->ctx))->run();
                 break;
         }
     }

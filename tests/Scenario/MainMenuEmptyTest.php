@@ -30,6 +30,7 @@ final class MainMenuEmptyTest extends TestCase
             ['Cancel adding this site?', true],
             ['What would you like to do?', 'check'],
             ['What would you like to do?', 'settings'],
+            ['Settings', MenuContext::BACK],
             ['What would you like to do?', 'quit'],
         ]);
         $output = new BufferedOutput();
@@ -45,7 +46,7 @@ final class MainMenuEmptyTest extends TestCase
         self::assertStringContainsString('Nothing was added.', $screen);
         self::assertStringContainsString('cpdeploy · Server check', $screen);
         self::assertMatchesRegularExpression('/\d+ ok, \d+ warnings?, \d+ problems?/', $screen);
-        self::assertStringContainsString('cpdeploy token set', $screen);
+        self::assertStringContainsString('cpdeploy · Settings', $screen);
         self::assertStringNotContainsString('✓', $screen, 'M-03: ASCII symbols without UTF-8');
     }
 

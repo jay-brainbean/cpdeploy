@@ -150,7 +150,9 @@ shown in the §13 format (`Ui/ErrorView`) and the screen returns to its menu
 
 | Screen | Service (shared with the command) |
 |---|---|
-| `MainMenu` | `SiteStatus`, `Recovery`, `ServerCheck`, `History`; *Add a new site* runs `Wizard/AddSiteWizard` (`add`) |
+| `MainMenu` | `SiteStatus`, `Recovery`, `ServerCheck` + `SiteCheck` (`check`), `History`; *Add a new site* runs `Wizard/AddSiteWizard` (`add`) |
+| `SettingsMenu` | `GitHub/TokenService` (`token`), `Services::changeConfig`, `Git/HostKeyRefresh` (`check --refresh-host-keys`), `Update/SelfUpdate` (`self-update`) |
+| `RemoveSiteMenu` | `Deploy/SiteRemover` + `Docroot/DocrootDetach` (`remove`) |
 | `DeployScreen` | `Deployer` (`deploy`), `MirrorService` for *another ref* |
 | `ManageSiteMenu` → Branch, Composer credentials, Site info | `SiteSettings`, `MirrorService`, `ComposerAuth`, `SiteInfo` |
 | `ReleasesMenu` | `ReleaseActions` (`releases`), `Rollback` (`rollback`) |
@@ -160,6 +162,23 @@ shown in the §13 format (`Ui/ErrorView`) and the screen returns to its menu
 | `LaravelToolsMenu` | `Laravel/LaravelTools` (`artisan`, `down`, `up`) |
 | `KeyMenu` | `Git/SiteKeys` (`key`) |
 | `LogsMenu` | `Deploy/History` (`logs`) |
+
+## Removing a site (`Deploy/SiteRemover`)
+
+RM-01 in order, under the site lock: the docroot action (`Docroot/DocrootDetach`:
+restore the pre-cpdeploy folder, detach to a plain copy, or empty), the deploy
+key, the database (only one cpdeploy created), `shared/` moved to
+`~/cpdeploy/removed/` (or deleted), the releases and `repo.git` through
+`Fs::deleteTree` (after `current` is unlinked), the site folder through
+`Fs::deleteSiteFolder`, and a line in `removed/history.jsonl`. A failed docroot
+action stops before anything is deleted (RM-02).
+
+## Updates (`Update/SelfUpdate`)
+
+The newest release of `update.repo` from the GitHub API; the phar and its
+`.sha256` downloaded through the asset API, verified, run once with
+`--version`, then renamed over `~/cpdeploy/app/cpdeploy.phar` with the old one
+kept as `.prev`. `--rollback` swaps the two.
 
 ## The add-site wizard (`Wizard/`)
 

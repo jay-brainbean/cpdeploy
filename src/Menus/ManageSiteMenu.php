@@ -60,7 +60,11 @@ final class ManageSiteMenu
             if ($choice === MenuContext::BACK) {
                 return;
             }
-            $this->ctx->attempt(fn () => $this->open($site, (string) $choice));
+            try {
+                $this->ctx->attempt(fn () => $this->open($site, (string) $choice));
+            } catch (SiteRemoved) {
+                return;
+            }
         }
     }
 
@@ -114,9 +118,9 @@ final class ManageSiteMenu
                 $this->info($site);
                 break;
             case 'remove':
-                $this->ctx->line('Removing a site from the menu is not available in this version yet.');
-                $this->ctx->line("Until then, the site keeps running; its files are in ~/cpdeploy/sites/{$site}.");
-                $this->ctx->pause();
+                if ((new RemoveSiteMenu($this->ctx))->run($site)) {
+                    throw new SiteRemoved();
+                }
                 break;
         }
     }

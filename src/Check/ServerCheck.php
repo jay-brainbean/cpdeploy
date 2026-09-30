@@ -12,8 +12,8 @@ use Cpdeploy\Support\SystemInfo;
 use Cpdeploy\Ui\Format;
 
 /**
- * `cpdeploy check` logic (§9.7). The GitHub and per-site groups arrive with
- * M2 and M3.
+ * `cpdeploy check` logic (§9.7): the server groups. The per-site group is
+ * SiteCheck.
  */
 final class ServerCheck
 {
@@ -313,6 +313,8 @@ final class ServerCheck
         $problems = $s->hostKeys->problems();
         if ($problems !== []) {
             $checks[] = CheckResult::fail('github.hostkeys', "This build's GitHub host keys don't match GitHub's published fingerprints: " . $problems[0], 'Run: cpdeploy self-update');
+        } elseif ($s->hostKeys->isRefreshed()) {
+            $checks[] = CheckResult::ok('github.hostkeys', 'GitHub host keys refreshed from api.github.com (--refresh-host-keys)');
         } elseif (!$s->hostKeys->installedMatches()) {
             $checks[] = CheckResult::warn('github.hostkeys', '~/cpdeploy/known_hosts differs from the GitHub keys shipped with cpdeploy', 'It is rewritten the next time cpdeploy starts');
         } else {

@@ -499,6 +499,7 @@ final class MenuTest extends DeployScenario
             ['Site info', 'sizes'],
             ['Site info', MenuContext::BACK],
             ['Manage shop', 'remove'],
+            ['What should happen to', MenuContext::BACK],
             ['Manage shop', MenuContext::BACK],
             $this->main('quit'),
         ]);
@@ -512,7 +513,8 @@ final class MenuTest extends DeployScenario
         self::assertStringContainsString('No failed operations.', $screen);
         self::assertStringContainsString($this->docroot . ' → ' . $this->siteDir . '/current/public', $screen);
         self::assertMatchesRegularExpression('/Releases\s+\d+(\.\d)? [KMG]B/', $screen);
-        self::assertStringContainsString('Removing a site from the menu is not available in this version yet', $screen);
+        self::assertStringContainsString('cpdeploy · shop · Remove site', $screen);
+        self::assertDirectoryExists($this->siteDir, 'Back at the first Remove site question removes nothing');
     }
 
     /**

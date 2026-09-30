@@ -88,6 +88,30 @@ final class GlobalConfig
         return $config;
     }
 
+    /**
+     * A copy with one dotted key changed, validated (§8.3): E_CONFIG_INVALID
+     * when the result has a problem.
+     */
+    public function with(string $path, mixed $value): self
+    {
+        $data = $this->data;
+        $ref = &$data;
+        foreach (explode('.', $path) as $part) {
+            if (!is_array($ref)) {
+                $ref = [];
+            }
+            $ref = &$ref[$part];
+        }
+        $ref = $value;
+        unset($ref);
+        $errors = GlobalSchema::validate($data)['errors'];
+        if ($errors !== []) {
+            throw new CpdeployException(ErrorCode::CONFIG_INVALID, implode("\n", $errors), 'Nothing was changed.');
+        }
+
+        return new self($data, $this->warnings);
+    }
+
     public function save(string $file, Fs $fs): void
     {
         $fs->writeAtomic($file, self::HEADER . "\n" . Yaml::dump($this->data, 4, 2), Paths::MODE_SECRET_FILE);
