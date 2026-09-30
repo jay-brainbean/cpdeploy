@@ -29,6 +29,13 @@ curl -fsSLO https://github.com/jay-brainbean/cpdeploy/releases/latest/download/i
 bash install.sh --download
 ```
 
+A release candidate (not picked up by `latest`) is installed by its tag:
+
+```sh
+curl -fsSLO https://github.com/jay-brainbean/cpdeploy/releases/download/v1.0.0-rc.1/install.sh
+bash install.sh --download v1.0.0-rc.1
+```
+
 Or with a phar you downloaded yourself:
 
 ```sh
@@ -443,3 +450,7 @@ running; their data stays in `~/cpdeploy/sites`.
 See [docs/testing.md](docs/testing.md) for running the tests and building the
 phar, and [docs/architecture.md](docs/architecture.md) for how the code is
 organised. Judgement calls are logged in [docs/decisions.md](docs/decisions.md).
+
+## License
+
+[MIT](LICENSE)

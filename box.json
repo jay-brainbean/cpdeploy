@@ -2,6 +2,7 @@
     "main": "bin/cpdeploy",
     "output": "dist/cpdeploy.phar",
     "directories": ["src", "resources"],
+    "files": ["LICENSE"],
     "finder": [
         {
             "in": "vendor",
