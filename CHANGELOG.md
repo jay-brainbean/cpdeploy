@@ -5,7 +5,14 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ## Unreleased
 
+## 1.0.0-rc.1 - 2026-09-30
+
+First release candidate: everything in the plan's milestones M0–M7. Test it on
+a real cPanel account before 1.0.0.
+
 ### Added
+
+- MIT license.
 
 - M7 *Remove site* and `cpdeploy remove <site>`: the domain keeps running from
   a plain copy (`--detach`), gets its old folder back (`--restore-backup`) or

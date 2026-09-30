@@ -123,3 +123,5 @@ anything that deviates from the letter of the plan. Newest last.
 | 2026-09-29 | M7: release notes | `scripts/release-notes.sh <version>` prints that version's CHANGELOG section (heading `## 1.0.0` or `## [1.0.0]`) | Keeps the release workflow a few lines |
 | 2026-09-29 | M7: JSON shapes (S-37) | Published as JSON Schema files in `resources/schemas/`; the tests check them with a small checker for the subset used | No new dependency for the tests |
 | 2026-09-29 | M7: manual QA (M-07…M-16) | Not run in this environment; they need the owner's real cPanel and CloudLinux servers (§0.1 input 2) | Listed in the PR as open before `v1.0.0-rc.1` |
+| 2026-09-30 | M8: license | MIT (owner's choice), copyright "Brainbean"; `LICENSE` is also packed into the phar | §0.1 input 4; the third-party licences in `vendor/` are packed as before |
+| 2026-09-30 | M8: first release candidate | `v1.0.0-rc.1` from main after M7, marked as a pre-release by the release workflow; the manual QA (M-01…M-16) runs against it | §17 M7 acceptance names the tag; QA needs installable assets |
