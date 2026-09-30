@@ -45,9 +45,11 @@ final class CheckSiteTest extends DeployScenario
         self::assertSame('ok', $site['site.shared']['status']);
         self::assertSame('ok', $site['site.state']['status']);
         self::assertSame('warn', $site['site.env.mode']['status']);
-        // The web server of the harness runs the real PHP, not the site's 8.2.
-        self::assertSame('fail', $site['site.probe']['status']);
-        self::assertStringContainsString('The domain serves PHP ' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, $site['site.probe']['message']);
+        // The harness web server runs the PHP running the tests: a match with the
+        // site's 8.2 is ✓, anything else ✗.
+        $served = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+        self::assertSame($served === '8.2' ? 'ok' : 'fail', $site['site.probe']['status']);
+        self::assertStringContainsString('The domain serves PHP ' . $served, $site['site.probe']['message']);
         self::assertSame([], glob($this->siteDir . '/current/public/.cpd-probe-*') ?: [], 'the probe file is removed');
 
         // Plain output offers the .env fix; --yes applies it.

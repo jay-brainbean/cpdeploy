@@ -139,7 +139,8 @@ their arguments.
   old folder (S-34), empty, a site that never went live, and the menu path with
   the typed confirmation.
 - `CheckSiteTest`: the per-site group before and after a deploy, `--probe`
-  (the harness web server runs the real PHP, so the probe reports a mismatch),
+  (the harness web server runs the PHP running the tests, so the probe reports
+  a mismatch except on PHP 8.2),
   the `.env` mode fix, and `--refresh-host-keys` against `FakeGitHub`'s `/meta`.
 - `JsonOutputTest` (S-37): every `--json` document checked against
   `resources/schemas/` with `tests/Support/JsonShape`, and stdout holding only
