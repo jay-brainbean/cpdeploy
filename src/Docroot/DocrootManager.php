@@ -229,6 +229,25 @@ final class DocrootManager
     }
 
     /**
+     * A Laravel web dir whose .htaccess has no rules of its own gets Laravel's
+     * front-controller rules (see LaravelRewrites). Returns whether they were added.
+     */
+    public function ensureLaravelRewrites(string $webPath): bool
+    {
+        $file = $webPath . '/.htaccess';
+        if (!is_file($webPath . '/index.php') || is_link($file)) {
+            return false;
+        }
+        $existing = is_file($file) ? (string) file_get_contents($file) : null;
+        if (!LaravelRewrites::needed($existing)) {
+            return false;
+        }
+        $this->fs->writeAtomic($file, LaravelRewrites::add($existing), Paths::MODE_PUBLIC_FILE);
+
+        return true;
+    }
+
+    /**
      * Copies docroot extras (shared.docroot_dirs/files) from a real folder into
      * shared/docroot. Existing folders are merged; files are replaced.
      *

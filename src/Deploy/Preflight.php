@@ -11,6 +11,7 @@ use Cpdeploy\Database\DbCheck;
 use Cpdeploy\Database\DbCheckResult;
 use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Docroot\HandlerBlock;
+use Cpdeploy\Docroot\LaravelRewrites;
 use Cpdeploy\Env\EnvFile;
 use Cpdeploy\Env\EnvManager;
 use Cpdeploy\Git\GitRepository;
@@ -257,7 +258,7 @@ final class Preflight
         $file = $live->dir . '/' . $relative;
         $onServer = is_file($file) && !is_link($file) ? (string) file_get_contents($file) : '';
         $inGit = $this->git->show($ctx->mirror(), $live->commit(), $relative) ?? '';
-        $normal = static fn (string $text): string => trim(str_replace("\r\n", "\n", HandlerBlock::strip($text)));
+        $normal = static fn (string $text): string => trim(str_replace("\r\n", "\n", LaravelRewrites::strip(HandlerBlock::strip($text))));
         if ($normal($onServer) === $normal($inGit)) {
             return;
         }

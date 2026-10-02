@@ -5,6 +5,20 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ## Unreleased
 
+### Fixed
+
+- A closed terminal (SSH session dropped, cPanel Terminal tab closed) no
+  longer leaves cpdeploy running at full CPU. The open prompt now ends as if
+  cancelled, so the flow cleans up, and the process exits; `kill` (SIGTERM)
+  also stops it while it waits at a prompt.
+- After Ctrl+C cancelled an action in the menu, the next action no longer
+  starts out cancelled.
+- Laravel sites whose repo has no `public/.htaccess` (or one without rules)
+  served only the home page and answered 404 everywhere else. Each release now
+  gets Laravel's default rewrite rules in that case, the deploy warns until
+  the file is committed, and `cpdeploy check <site>` flags a live
+  `public/.htaccess` that doesn't send requests to `index.php`.
+
 ## 1.0.0-rc.1 - 2026-09-30
 
 First release candidate: everything in the plan's milestones M0–M7. Test it on

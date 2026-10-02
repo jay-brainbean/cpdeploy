@@ -11,6 +11,7 @@ use Cpdeploy\Deploy\Release;
 use Cpdeploy\Deploy\ReleaseManager;
 use Cpdeploy\Deploy\StateFile;
 use Cpdeploy\Docroot\DocrootManager;
+use Cpdeploy\Docroot\LaravelRewrites;
 use Cpdeploy\Git\DeployKeyService;
 use Cpdeploy\Laravel\Maintenance;
 use Cpdeploy\Runtime\NodeResolver;
@@ -22,9 +23,9 @@ use Throwable;
 
 /**
  * The per-site group of `cpdeploy check` (§9.7): deploy key access, the site
- * PHP and Node, .env, the docroot link, the live release, shared folders, an
- * interrupted operation, maintenance mode, and with --probe the PHP the domain
- * really serves (HTTP-04).
+ * PHP and Node, .env, the docroot link, Laravel's rewrite rules, the live
+ * release, shared folders, an interrupted operation, maintenance mode, and with
+ * --probe the PHP the domain really serves (HTTP-04).
  */
 final class SiteCheck
 {
@@ -65,6 +66,9 @@ final class SiteCheck
             $checks[] = $this->env($config);
         }
         $checks[] = $this->docroot($config, $live);
+        if ($config->isLaravel() && $live !== null) {
+            $checks[] = $this->rewrites($config, $live);
+        }
         $checks[] = $this->current($live);
         $checks[] = $this->shared($config);
         $checks[] = $this->state($site);
@@ -162,6 +166,25 @@ final class SiteCheck
         }
 
         return CheckResult::ok('site.docroot', "{$docroot} → current" . ($config->webDir() === '' ? '' : '/' . $config->webDir()));
+    }
+
+    /**
+     * Laravel needs <web_dir>/.htaccess to send unknown paths to index.php, or
+     * every route but `/` answers 404.
+     */
+    private function rewrites(SiteConfig $config, Release $live): CheckResult
+    {
+        $relative = ($config->webDir() === '' ? '' : $config->webDir() . '/') . '.htaccess';
+        $file = $live->dir . '/' . $relative;
+        if (is_file($file) && LaravelRewrites::routesToIndex((string) file_get_contents($file))) {
+            return CheckResult::ok('site.rewrites', "{$relative} sends requests to index.php");
+        }
+
+        return CheckResult::warn(
+            'site.rewrites',
+            "{$relative} in the live release doesn't send requests to index.php: pages other than the home page answer 404",
+            "Commit Laravel's public/.htaccess to your repo and deploy again",
+        );
     }
 
     private function current(?Release $live): CheckResult
