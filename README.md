@@ -32,8 +32,8 @@ bash install.sh --download
 A release candidate (not picked up by `latest`) is installed by its tag:
 
 ```sh
-curl -fsSLO https://github.com/jay-brainbean/cpdeploy/releases/download/v1.0.0-rc.1/install.sh
-bash install.sh --download v1.0.0-rc.1
+curl -fsSLO https://github.com/jay-brainbean/cpdeploy/releases/download/v1.0.0-rc.2/install.sh
+bash install.sh --download v1.0.0-rc.2
 ```
 
 Or with a phar you downloaded yourself:
