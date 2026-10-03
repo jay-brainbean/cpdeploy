@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cpdeploy\Tests\Scenario;
 
 use Cpdeploy\Docroot\HandlerBlock;
+use Cpdeploy\Docroot\LaravelRewrites;
 use Cpdeploy\Tests\Support\DeployScenario;
 
 /**
@@ -132,6 +133,43 @@ final class DeployFirstTest extends DeployScenario
         self::assertStringStartsWith(HandlerBlock::BEGIN, $htaccess);
         self::assertStringContainsString('RewriteEngine On', $htaccess);
         self::assertStringContainsString('extra rules', $r['stdout']);
+    }
+
+    /**
+     * A repo without public/.htaccess: the release gets Laravel's rewrite rules
+     * (below the handler block), the deploy warns, and the next deploy doesn't
+     * take the added rules for a manual edit (PRE-17).
+     *
+     * @covers-req DOC-04
+     * @covers-req DOC-05
+     */
+    public function testLaravelRewriteRulesAreAddedWhenTheRepoHasNoHtaccess(): void
+    {
+        $this->docroot = $this->home . '/public_html';
+        $this->domainsFixture(siteDocroot: $this->docroot);
+        $this->writeSite();
+        $this->startWeb();
+        mkdir($this->docroot, 0755, true);
+        file_put_contents($this->docroot . '/.htaccess', HandlerBlock::BEGIN . "\n<IfModule mime_module>\n  AddHandler application/x-httpd-ea-php82 .php .php8 .phtml\n</IfModule>\n" . HandlerBlock::END . "\n");
+        $this->repo->delete('public/.htaccess');
+        $this->repo->commit('No public/.htaccess');
+        $this->repo->push();
+
+        $r = $this->deploy(['--yes']);
+
+        $this->assertExit(0, $r);
+        $this->assertInvariants();
+        $htaccess = (string) file_get_contents($this->liveDir() . '/public/.htaccess');
+        self::assertStringStartsWith(HandlerBlock::BEGIN, $htaccess);
+        self::assertStringContainsString(LaravelRewrites::BEGIN, $htaccess);
+        self::assertStringContainsString('RewriteRule ^ index.php [L]', $htaccess);
+        self::assertStringContainsString('public/.htaccess is missing from your repo', $r['stdout']);
+
+        $r = $this->deploy(['--force', '--yes']);
+
+        $this->assertExit(0, $r);
+        self::assertStringNotContainsString('changed outside git', $r['stdout'] . $this->lastLog());
+        self::assertStringContainsString('RewriteRule ^ index.php [L]', (string) file_get_contents($this->liveDir() . '/public/.htaccess'));
     }
 
     /**

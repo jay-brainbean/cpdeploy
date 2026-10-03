@@ -16,13 +16,18 @@ use Cpdeploy\Support\Log;
 use RuntimeException;
 
 /**
- * B3: docroot extras linked inside the web dir (REL-05) and the cPanel PHP
- * handler block injected into <web_dir>/.htaccess for the site PHP (DOC-04).
+ * B3: docroot extras linked inside the web dir (REL-05), Laravel's rewrite
+ * rules when the repo has none (LaravelRewrites) and the cPanel PHP handler
+ * block injected into <web_dir>/.htaccess for the site PHP (DOC-04).
  * When the web dir only appears after the frontend build (static sites), the
  * builder runs this step again after B5.
  */
 final class DocrootFilesStep implements Step
 {
+    public const REWRITES = 'Laravel rewrite rules';
+    public const REWRITES_WARNING = 'public/.htaccess is missing from your repo (or has no rules), so every page but the home page would answer 404. '
+        . "cpdeploy added Laravel's default rewrite rules to this release; commit public/.htaccess to your repo.";
+
     public function __construct(
         private readonly Paths $paths,
         private readonly Fs $fs,
@@ -61,8 +66,12 @@ final class DocrootFilesStep implements Step
             return 'after the build';
         }
         $php = $ctx->sitePhp();
+        $done = $this->linkWeb($ctx->site, (string) $ctx->release?->webPath($ctx->site->webDir()), $php->family, PhpInstall::majorMinorOf($php->version), $ctx->log);
+        if (in_array(self::REWRITES, $done, true)) {
+            $ctx->warn(self::REWRITES_WARNING);
+        }
 
-        return implode(' · ', $this->linkWeb($ctx->site, (string) $ctx->release?->webPath($ctx->site->webDir()), $php->family, PhpInstall::majorMinorOf($php->version), $ctx->log));
+        return implode(' · ', $done);
     }
 
     /**
@@ -94,6 +103,10 @@ final class DocrootFilesStep implements Step
                 }
                 $this->link($web . '/' . $file, $shared . '/' . $file);
                 $done[] = $file;
+            }
+            if ($site->isLaravel() && $this->docroots->ensureLaravelRewrites($web)) {
+                $log?->write('WARNING: ' . self::REWRITES_WARNING);
+                $done[] = self::REWRITES;
             }
             if ($this->docroots->injectHandler($site, $web, $family, $majorMinor)) {
                 $done[] = 'PHP handler';

@@ -875,7 +875,7 @@ final class Services
             return new ScriptedAsker(is_array($answers) ? array_values($answers) : []);
         }
         if ($this->isInteractive($input)) {
-            return new PromptsAsker();
+            return new PromptsAsker($this->signals());
         }
         $yes = $input->hasOption('yes') && $input->getOption('yes') === true;
 

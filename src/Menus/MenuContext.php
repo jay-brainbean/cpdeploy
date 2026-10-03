@@ -95,6 +95,9 @@ final class MenuContext
             $this->pause();
 
             return false;
+        } finally {
+            // A Ctrl+C belongs to the action it cancelled, not to the next one.
+            $this->services->signals()->reset();
         }
     }
 
