@@ -5,6 +5,10 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ## Unreleased
 
+## 1.0.0-rc.2 - 2026-10-03
+
+Fixes from testing rc.1 on a real cPanel account.
+
 ### Fixed
 
 - A closed terminal (SSH session dropped, cPanel Terminal tab closed) no
