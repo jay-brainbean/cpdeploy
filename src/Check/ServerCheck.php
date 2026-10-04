@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Check;
 
+use Cpdeploy\Cpanel\Domain;
 use Cpdeploy\Runtime\PhpInstall;
 use Cpdeploy\Support\Errors\CpdeployException;
+use Cpdeploy\Support\Fs;
 use Cpdeploy\Support\RunOptions;
 use Cpdeploy\Support\Shell;
 use Cpdeploy\Support\SystemInfo;
@@ -166,6 +168,9 @@ final class ServerCheck
         } catch (CpdeployException $e) {
             return [CheckResult::fail('cpanel.uapi', $e->getMessage(), $e->hint)];
         }
+        if ($s->paths !== null) {
+            $checks[] = self::sitesFolder($s->paths->sitesFilesRoot($s->config->sitesDir()), $domains);
+        }
 
         try {
             $versions = $s->multiPhp->installedVersions();
@@ -207,6 +212,32 @@ final class ServerCheck
         }
 
         return $checks;
+    }
+
+    /**
+     * LAY-04: the folder new sites go in must be outside every domain's
+     * document root, or their .env and code could be downloaded.
+     *
+     * @param list<Domain> $domains
+     */
+    public static function sitesFolder(string $root, array $domains): CheckResult
+    {
+        $normal = Fs::normalize($root);
+        foreach ($domains as $domain) {
+            if ($domain->type === Domain::PARKED || $domain->documentRoot === '') {
+                continue;
+            }
+            $served = Fs::normalize($domain->documentRoot);
+            if ($normal === $served || Fs::isInside($normal, $served)) {
+                return CheckResult::fail(
+                    'cpanel.sites_dir',
+                    sprintf('The sites folder %s is inside %s, which %s serves on the web', $root, $domain->documentRoot, $domain->name),
+                    'Set sites_dir in ~/cpdeploy/config.yml (Settings → Defaults for new sites) to a folder outside every domain\'s folder',
+                );
+            }
+        }
+
+        return CheckResult::ok('cpanel.sites_dir', sprintf('New sites go in %s (outside every domain\'s folder)', $root));
     }
 
     /**

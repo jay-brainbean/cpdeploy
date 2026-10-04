@@ -32,7 +32,7 @@ final class DocrootManager
      */
     public function linkTarget(SiteConfig $config): string
     {
-        $current = $this->paths->current($config->name());
+        $current = $this->filesDir($config) . '/current';
 
         return $config->webDir() === '' ? $current : $current . '/' . $config->webDir();
     }
@@ -60,7 +60,16 @@ final class DocrootManager
     {
         $target = $this->symlinkTarget($config->docroot());
 
-        return $target !== null && Fs::isInside($target, Fs::normalize($this->paths->siteDir($config->name())));
+        return $target !== null && Fs::isInside($target, Fs::normalize($this->filesDir($config)));
+    }
+
+    /**
+     * The site's own folder (LAY-04), from the config itself so it also works for
+     * a site the wizard hasn't created yet.
+     */
+    private function filesDir(SiteConfig $config): string
+    {
+        return $config->siteDir() !== '' ? $this->paths->fromHome($config->siteDir()) : $this->paths->siteFilesDir($config->name());
     }
 
     /**
@@ -101,6 +110,26 @@ final class DocrootManager
                 $config->name(),
                 $domain->documentRoot,
             );
+        }
+
+        // LAY-04: the site's own folder (.env, the code) must not be inside any
+        // domain's document root, where the web server would serve it.
+        $siteFiles = Fs::normalize($this->filesDir($config));
+        foreach ($domains as $d) {
+            if ($d->type === Domain::PARKED || $d->documentRoot === '') {
+                continue;
+            }
+            $served = Fs::normalize($d->documentRoot);
+            if ($siteFiles === $served || Fs::isInside($siteFiles, $served)) {
+                $problems[] = sprintf(
+                    "The site's folder %s is inside %s, which %s serves on the web: its .env and code could be downloaded. "
+                    . 'Set sites_dir in ~/cpdeploy/config.yml to a folder outside every domain\'s folder, then add the site again.',
+                    $siteFiles,
+                    $d->documentRoot,
+                    $d->name,
+                );
+                break;
+            }
         }
 
         // (d) no other domain's document root inside this docroot.

@@ -125,7 +125,7 @@ final class DriftTest extends DeployScenario
         $r = $this->deploy(['--force', '--yes']);
 
         $this->assertExit(0, $r);
-        $shared = $this->siteDir . '/shared/docroot/.user.ini';
+        $shared = $this->siteFiles . '/shared/docroot/.user.ini';
         self::assertSame("memory_limit = 512M\n", @file_get_contents($shared));
         $link = $this->liveDir() . '/public/.user.ini';
         self::assertTrue(is_link($link), 'the new release links .user.ini');

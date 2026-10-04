@@ -23,6 +23,9 @@ final class FsTest extends TestCase
         foreach ($this->paths->skeleton() as $dir => $mode) {
             $this->fs->ensureDir($dir, $mode);
         }
+        // The site "shop": its settings in ~/cpdeploy/sites/shop, its files in ~/cpdeploy_sites/shop.example.test (LAY-04).
+        $this->fs->ensureDir($this->paths->siteDir('shop'), 0711);
+        file_put_contents($this->paths->siteConfig('shop'), "name: shop\nsite_dir: cpdeploy_sites/shop.example.test\n");
     }
 
     /**
@@ -250,6 +253,80 @@ final class FsTest extends TestCase
         self::assertSame('a.php', readlink($dst . '/link.php'));
         self::assertNotSame(fileinode($src . '/vendor/a.php'), fileinode($dst . '/a.php'));
         self::assertGreaterThan(0, $this->fs->diskUsageKb($dst));
+    }
+
+    /**
+     * Releases live in the site's own folder (LAY-04).
+     *
+     * @covers-req LAY-04
+     */
+    public function testSiteFilesLiveInTheSiteDir(): void
+    {
+        self::assertSame($this->home . '/cpdeploy_sites/shop.example.test/releases/r1', $this->paths->release('shop', 'r1'));
+        self::assertSame($this->home . '/cpdeploy_sites/shop.example.test/shared/.env', $this->paths->sharedEnv('shop'));
+        self::assertSame($this->root . '/sites/shop/repo.git', $this->paths->mirror('shop'));
+    }
+
+    /**
+     * @covers-req FS-03
+     * @covers-req INV-02
+     */
+    public function testDeleteReleaseOnlyTakesAReleaseThatIsNotLive(): void
+    {
+        $shared = $this->paths->sharedDir('shop');
+        $this->fs->ensureDir($shared . '/storage', 0711);
+        file_put_contents($shared . '/storage/sentinel.txt', 'keep');
+        $old = $this->paths->release('shop', 'old');
+        $live = $this->paths->release('shop', 'live');
+        $this->fs->ensureDir($old, 0755);
+        $this->fs->ensureDir($live, 0755);
+        $this->fs->linkRelative($old . '/storage', $shared . '/storage');
+        $this->fs->linkRelative($this->paths->current('shop'), $live);
+
+        $this->fs->deleteRelease('shop', $old);
+        self::assertDirectoryDoesNotExist($old);
+        self::assertFileExists($shared . '/storage/sentinel.txt');
+
+        foreach ([$live, $shared, $this->paths->releasesDir('shop'), $live . '/x', $this->paths->releasesDir('shop') . '/../shared'] as $path) {
+            try {
+                $this->fs->deleteRelease('shop', $path);
+                self::fail("deleteRelease() accepted {$path}");
+            } catch (RuntimeException $e) {
+                self::assertStringContainsString('Refusing', $e->getMessage());
+            }
+        }
+        self::assertDirectoryExists($live);
+    }
+
+    /**
+     * @covers-req LAY-04
+     */
+    public function testDeleteSiteFilesRemovesOnlyAFolderCpdeployMade(): void
+    {
+        $files = $this->paths->siteFilesDir('shop');
+        $this->fs->ensureDir($this->paths->release('shop', 'r1'), 0755);
+        $this->fs->ensureDir($this->paths->sharedDir('shop'), 0711);
+        mkdir($this->tmp . '/outside');
+        file_put_contents($this->tmp . '/outside/sentinel.txt', 'keep me');
+        symlink($this->tmp . '/outside', $this->paths->sharedDir('shop') . '/outside');
+
+        file_put_contents($files . '/notes.txt', 'mine');
+        try {
+            $this->fs->deleteSiteFiles('shop');
+            self::fail('a folder with other files must be refused');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('notes.txt', $e->getMessage());
+        }
+        unlink($files . '/notes.txt');
+
+        $this->fs->deleteSiteFiles('shop');
+        self::assertDirectoryDoesNotExist($files);
+        self::assertFileExists($this->tmp . '/outside/sentinel.txt');
+        $this->fs->deleteSiteFiles('shop'); // already gone: nothing to do
+
+        $this->paths->useSiteDir('shop', 'cpdeploy/sites/shop');
+        $this->expectExceptionMessage('outside ~/cpdeploy');
+        $this->fs->deleteSiteFiles('shop');
     }
 
     /**

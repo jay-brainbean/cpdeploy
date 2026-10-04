@@ -161,7 +161,7 @@ final class DocrootDetach
      */
     private function materialise(string $release, string $app, string $site): void
     {
-        $siteDir = Fs::normalize($this->paths->siteDir($site));
+        $siteDir = Fs::normalize($this->paths->siteFilesDir($site));
         $links = [];
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($release, FilesystemIterator::SKIP_DOTS),

@@ -29,7 +29,7 @@ final class WizardTest extends DeployScenario
     {
         parent::setUp();
         // The scenario harness writes a site by hand; the wizard starts without one.
-        exec('rm -rf ' . escapeshellarg($this->siteDir));
+        exec('rm -rf ' . escapeshellarg($this->siteDir) . ' ' . escapeshellarg($this->siteFiles));
         $this->github = new FakeGitHub($this->tmp . '/github');
         $this->env['CPDEPLOY_GITHUB_API'] = $this->github->url();
         $this->env['CPDEPLOY_NOW'] = '2026-09-29T12:00:00Z';
@@ -80,6 +80,11 @@ final class WizardTest extends DeployScenario
         self::assertSame('8.2', $site['php']['version']);
         self::assertSame(['created_by_cpdeploy' => true, 'name' => 'cpuser_shop', 'user' => 'cpuser_shop'], $site['database']);
         self::assertSame('2026-09-29T12:00:00Z', $site['created_at']);
+        // LAY-04: the site's own folder is named after the domain, outside ~/cpdeploy.
+        self::assertSame('cpdeploy_sites/' . self::DOMAIN, $site['site_dir']);
+        self::assertSame(0711, fileperms($this->siteFiles) & 0777);
+        self::assertSame(['shared'], array_values(array_diff(scandir($this->siteFiles) ?: [], ['.', '..'])));
+        self::assertStringContainsString('~/cpdeploy_sites/' . self::DOMAIN . '  (current, releases, shared)', $screen);
 
         // The database and user, through cPanel (DB-01).
         $calls = array_column($this->uapiCalls(), 'args', 'call');
@@ -90,8 +95,8 @@ final class WizardTest extends DeployScenario
         self::assertSame('ALL PRIVILEGES', $calls['Mysql::set_privileges_on_database']['privileges'] ?? 'ALL PRIVILEGES');
 
         // shared/.env (ENV-09), 600.
-        $env = (string) file_get_contents($this->siteDir . '/shared/.env');
-        self::assertSame(0600, fileperms($this->siteDir . '/shared/.env') & 0777);
+        $env = (string) file_get_contents($this->siteFiles . '/shared/.env');
+        self::assertSame(0600, fileperms($this->siteFiles . '/shared/.env') & 0777);
         foreach (['APP_NAME=Shop', 'APP_ENV=production', 'APP_DEBUG=false', 'APP_URL=https://' . self::DOMAIN, 'DB_CONNECTION=mysql', 'DB_DATABASE=cpuser_shop', 'DB_USERNAME=cpuser_shop', 'DB_PASSWORD=' . $password] as $line) {
             self::assertStringContainsString($line, $env);
         }
@@ -164,6 +169,7 @@ final class WizardTest extends DeployScenario
         self::assertSame('cpuser_shop', $calls['Mysql::delete_database']['name']);
         self::assertSame('cpuser_shop', $calls['Mysql::delete_user']['name']);
         self::assertDirectoryDoesNotExist($this->siteDir);
+        self::assertDirectoryDoesNotExist($this->siteFiles, 'LAY-04: the site\'s own folder goes too');
         self::assertFileExists($this->home . '/.ssh/cpdeploy_shop', 'the key is kept when the user says so');
         self::assertCount(1, $this->github?->state()['keys']['acme/shop'] ?? []);
         self::assertSame([], glob($this->root . '/tmp/cpd-wizard-*') ?: []);
@@ -207,11 +213,11 @@ final class WizardTest extends DeployScenario
         self::assertNull($site['repo']['deploy_key_id']);
         self::assertSame('every', $site['steps']['migrate'], 'keys the wizard does not model are kept');
         self::assertArrayNotHasKey('setup', $site);
-        $env = (string) file_get_contents($this->siteDir . '/shared/.env');
+        $env = (string) file_get_contents($this->siteFiles . '/shared/.env');
         self::assertStringContainsString('DB_CONNECTION=sqlite', $env);
-        self::assertStringContainsString('DB_DATABASE=' . $this->siteDir . '/shared/database/database.sqlite', $env);
+        self::assertStringContainsString('DB_DATABASE=' . $this->siteFiles . '/shared/database/database.sqlite', $env);
         self::assertStringContainsString('# DB_HOST=', $env);
-        self::assertSame(0600, fileperms($this->siteDir . '/shared/database/database.sqlite') & 0777);
+        self::assertSame(0600, fileperms($this->siteFiles . '/shared/database/database.sqlite') & 0777);
 
         // deploy_now: the first deploy ran.
         self::assertNotNull($this->current());

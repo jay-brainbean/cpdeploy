@@ -91,7 +91,7 @@ final class ConfigCommand extends SiteCommand
      */
     public static function apply(SiteConfig $config, string $path, string $raw): SiteConfig
     {
-        if ($path === 'name' || $path === 'schema') {
+        if ($path === 'name' || $path === 'schema' || $path === 'site_dir') {
             throw new CpdeployException(ErrorCode::USAGE, "{$path} can't be changed", 'Create a new site instead.');
         }
         $missing = new \stdClass();
@@ -125,14 +125,18 @@ final class ConfigCommand extends SiteCommand
         $lock = $this->lock($site);
         try {
             $validated = null;
+            $before = $registry->load($site);
             $edited = $this->services->editor()->edit(
-                SiteRegistry::dump($registry->load($site)),
+                SiteRegistry::dump($before),
                 'site-yml',
-                static function (string $raw) use ($registry, $file, $site, &$validated): ?string {
+                static function (string $raw) use ($registry, $file, $site, $before, &$validated): ?string {
                     try {
                         $config = $registry->parse($raw, $file);
                         if ($config->name() !== $site) {
                             return "name can't change (it must stay {$site})";
+                        }
+                        if ($config->siteDir() !== $before->siteDir()) {
+                            return "site_dir can't change (it must stay {$before->siteDir()}): the site's files are there";
                         }
                         $validated = $config;
 

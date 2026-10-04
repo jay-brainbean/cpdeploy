@@ -43,7 +43,7 @@ final class RealLaravelTest extends DeployScenario
 
         // The app's own .env.example, made production-ready, with SQLite in shared/.
         $example = (string) file_get_contents($this->repo->work . '/.env.example');
-        $database = $this->siteDir . '/shared/database/database.sqlite';
+        $database = $this->siteFiles . '/shared/database/database.sqlite';
         $env = (string) preg_replace(
             ['/^APP_KEY=.*$/m', '/^APP_ENV=.*$/m', '/^APP_DEBUG=.*$/m', '/^APP_URL=.*$/m', '/^DB_CONNECTION=.*$/m', '/^#?\s*DB_DATABASE=.*$/m'],
             ['APP_KEY=base64:' . base64_encode(random_bytes(32)), 'APP_ENV=production', 'APP_DEBUG=false', 'APP_URL=https://' . self::DOMAIN, 'DB_CONNECTION=sqlite', 'DB_DATABASE=' . $database],

@@ -45,9 +45,11 @@ final class SiteInfo
         $out = [
             'Paths' => [
                 'Docroot' => $docroot . ($target !== null ? ' → ' . $target : (is_dir($docroot) ? ' (a folder: converted at the first deploy)' : ' (missing)')),
+                'Site folder' => $this->paths->siteFilesDir($site),
                 'Releases' => $this->paths->releasesDir($site),
                 'Shared' => $this->paths->sharedDir($site),
                 'Repository copy' => $this->paths->mirror($site),
+                'Settings and logs' => $this->paths->siteDir($site),
             ],
             'Versions' => [
                 'Site PHP' => $php['Site setting'] ?? '',

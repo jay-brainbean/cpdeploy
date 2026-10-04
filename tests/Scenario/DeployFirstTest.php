@@ -46,14 +46,14 @@ final class DeployFirstTest extends DeployScenario
 
         // Docroot: a relative symlink to current/public.
         self::assertTrue(is_link($this->docroot));
-        self::assertSame('cpdeploy/sites/shop/current/public', readlink($this->docroot));
+        self::assertSame('cpdeploy_sites/shop.example.test/current/public', readlink($this->docroot));
         self::assertNotNull($this->site()['domain']['converted_at']);
 
         // Shared skeleton and links.
         self::assertSame('../../shared/.env', readlink($live . '/.env'));
         self::assertSame('../../../shared/storage/app', readlink($live . '/storage/app'));
-        self::assertDirectoryExists($this->siteDir . '/shared/storage/app/public');
-        self::assertDirectoryExists($this->siteDir . '/shared/storage/framework/sessions');
+        self::assertDirectoryExists($this->siteFiles . '/shared/storage/app/public');
+        self::assertDirectoryExists($this->siteFiles . '/shared/storage/framework/sessions');
         self::assertDirectoryExists($live . '/storage/framework/views');
         self::assertFalse(is_link($live . '/storage/framework/views'));
         self::assertTrue(is_link($live . '/public/.well-known'));
@@ -74,7 +74,7 @@ final class DeployFirstTest extends DeployScenario
         // storage:link, optimize, migrations.
         self::assertSame('../storage/app/public', readlink($live . '/public/storage'));
         self::assertStringContainsString($id, (string) file_get_contents($live . '/bootstrap/cache/config.php'));
-        self::assertSame(['2026_01_01_000000_create_users_table'], json_decode((string) file_get_contents($this->siteDir . '/shared/storage/app/.fake-db.json'), true));
+        self::assertSame(['2026_01_01_000000_create_users_table'], json_decode((string) file_get_contents($this->siteFiles . '/shared/storage/app/.fake-db.json'), true));
         self::assertSame(['2026_01_01_000000_create_users_table'], $release['migrations']['list']);
 
         // Health check and marker cleanup.
@@ -115,7 +115,7 @@ final class DeployFirstTest extends DeployScenario
 
         $this->assertExit(0, $r);
         $this->assertInvariants();
-        self::assertSame('cpdeploy/sites/shop/current/public', readlink($this->docroot));
+        self::assertSame('cpdeploy_sites/shop.example.test/current/public', readlink($this->docroot));
         $backups = glob($this->siteDir . '/backups/docroot-*') ?: [];
         self::assertCount(1, $backups);
         self::assertSame('old site', file_get_contents($backups[0] . '/index.html'));
@@ -123,12 +123,12 @@ final class DeployFirstTest extends DeployScenario
         self::assertSame('backups/' . basename($backups[0]), $this->site()['domain']['backup']);
 
         // .well-known and .user.ini moved to shared and linked into the release.
-        self::assertSame('acme', file_get_contents($this->siteDir . '/shared/docroot/.well-known/acme-challenge/token'));
+        self::assertSame('acme', file_get_contents($this->siteFiles . '/shared/docroot/.well-known/acme-challenge/token'));
         self::assertSame('acme', file_get_contents($this->docroot . '/.well-known/acme-challenge/token'));
         self::assertTrue(is_link($this->liveDir() . '/public/.user.ini'));
 
         // Handler block captured and injected at the top of the release's .htaccess.
-        self::assertStringContainsString('x-httpd-ea-php82', (string) file_get_contents($this->siteDir . '/shared/php-handler.block'));
+        self::assertStringContainsString('x-httpd-ea-php82', (string) file_get_contents($this->siteFiles . '/shared/php-handler.block'));
         $htaccess = (string) file_get_contents($this->liveDir() . '/public/.htaccess');
         self::assertStringStartsWith(HandlerBlock::BEGIN, $htaccess);
         self::assertStringContainsString('RewriteEngine On', $htaccess);

@@ -19,6 +19,8 @@ final class WizardTransaction
 
     // Create (WIZ-04)
     public ?string $siteDir = null;
+    /** The site's own folder, ~/<site_dir> (LAY-04). */
+    public ?string $siteFilesDir = null;
     public ?string $database = null;
     public ?string $user = null;
 

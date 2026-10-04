@@ -130,8 +130,8 @@ This document is the single source of truth for building cpdeploy. It replaces a
 | **Site** | One deployed app: one repo and branch, deployed to one domain. Has a short **site name** (e.g. `shop`) |
 | **Release** | One folder containing the app at one commit, fully built. Id: `YYYYMMDD-HHMMSS` in UTC, e.g. `20260929-030512` |
 | **Live release** | The release that `current` points to |
-| **`current`** | Symlink `~/cpdeploy/sites/<site>/current → releases/<id>` |
-| **Shared** | `~/cpdeploy/sites/<site>/shared/`: files that survive every deploy (`.env`, parts of `storage/`, docroot extras) |
+| **`current`** | Symlink `~/cpdeploy_sites/<domain>/current → releases/<id>` (LAY-04) |
+| **Shared** | `~/cpdeploy_sites/<domain>/shared/`: files that survive every deploy (`.env`, parts of `storage/`, docroot extras) |
 | **Docroot** | The folder cPanel serves for the domain (e.g. `~/public_html`, `~/shop.example.com`). After the first go-live it is a symlink to `current/<web_dir>` |
 | **Web dir** | The folder inside a release that is served: `public` for Laravel, the build output folder for static sites |
 | **Go-live / activation** | Pointing `current` at the new release (atomic) |
@@ -492,28 +492,30 @@ Everything the tool creates lives in the places below. `Config/Paths` is the onl
 ├── tmp/                           700  temporary files; stale entries (>24 h) removed at start
 ├── removed/                       700  data kept from removed sites (§9.5.14)
 └── sites/                         711
-    └── shop/                      711  one folder per site (site name)
-        ├── site.yml               600  site settings (§8.2)
+    └── shop/                      711  the tool's data about one site (site name)
+        ├── site.yml               600  site settings (§8.2), incl. site_dir
         ├── .lock                  600  flock target (§7.19)
         ├── .deploy-state.json     600  exists only during an operation or after an interruption (§8.7)
         ├── repo.git/              700  bare mirror of the GitHub repo
-        ├── releases/              711
-        │   └── 20260929-030512/   755  one release (§7.3)
-        ├── current -> releases/20260929-030512        relative symlink
-        ├── shared/                711  survives every deploy (§7.3)
-        │   ├── .env               600
-        │   ├── env-backups/       700  last 10 versions of .env (600 each)
-        │   ├── auth.json          600  optional Composer credentials (§7.8)
-        │   ├── php-handler.block  644  captured cPanel PHP handler block (§7.14)
-        │   ├── storage/                app, logs, framework/cache, framework/sessions (Laravel)
-        │   ├── docroot/.well-known/    AutoSSL/ACME validation files
-        │   ├── docroot/.user.ini       MultiPHP INI Editor settings, if any
-        │   └── database/database.sqlite   SQLite sites only (600)
         ├── backups/               700  docroot-YYYYMMDD-HHMMSS/ = the docroot as it was before the first go-live
         ├── logs/                  700  YYYYMMDD-HHMMSS-<action>.log (600), last 50 kept
         └── history.jsonl          600  one JSON line per operation (§8.6)
+~/cpdeploy_sites/                  711  the sites themselves (config.yml sites_dir, LAY-04)
+└── shop.example.com/              711  one folder per site, named after its domain (site.yml site_dir)
+    ├── releases/                  711
+    │   └── 20260929-030512/       755  one release (§7.3)
+    ├── current -> releases/20260929-030512        relative symlink
+    └── shared/                    711  survives every deploy (§7.3)
+        ├── .env                   600
+        ├── env-backups/           700  last 10 versions of .env (600 each)
+        ├── auth.json              600  optional Composer credentials (§7.8)
+        ├── php-handler.block      644  captured cPanel PHP handler block (§7.14)
+        ├── storage/                    app, logs, framework/cache, framework/sessions (Laravel)
+        ├── docroot/.well-known/        AutoSSL/ACME validation files
+        ├── docroot/.user.ini           MultiPHP INI Editor settings, if any
+        └── database/database.sqlite    SQLite sites only (600)
 ~/.ssh/cpdeploy_shop               600  deploy key (private);  ~/.ssh/cpdeploy_shop.pub 644
-<docroot> -> cpdeploy/sites/shop/current/<web_dir>     relative symlink, created at first go-live
+<docroot> -> cpdeploy_sites/shop.example.com/current/<web_dir>     relative symlink, created at first go-live
 ```
 
 **LAY-01.** All symlinks the tool creates MUST be **relative**. This keeps sites working if the account is restored under a different home path, such as `/home2`. Compute them with `Fs::relativePath()`; never hard-code `../` chains.
@@ -522,6 +524,12 @@ Everything the tool creates lives in the places below. `Config/Paths` is the onl
 
 **LAY-03.** `tmp/` entries older than 24 hours are deleted at startup, but only entries the tool itself created, identified by the `cpd-` name prefix.
 
+**LAY-04 (two folders per site).** A site's own files (`current`, `releases/`, `shared/`) live in `~/<site_dir>`, by default `~/cpdeploy_sites/<domain>`, like Laravel Forge's per-site folder; the tool's data about it (settings, mirror, logs, history, backups, lock, state) stays in `~/cpdeploy/sites/<site>`.
+- `site_dir` is recorded in `site.yml` at creation, relative to the home folder (LAY-01), and never changes (`config set`/`edit` refuse it), so changing the domain or `sites_dir` never moves or orphans files.
+- New sites go in `~/<sites_dir>/<domain>` (`config.yml`, default `cpdeploy_sites`; Settings → Defaults for new sites). The folder must not exist yet.
+- The site folder MUST NOT be inside any domain's document root, where `.env` and the code could be downloaded: DOC-01 refuses it (wizard and every go-live), and `check` reports the sites folder.
+- Sites made by 1.0.0-rc.1/rc.2 (no `site_dir`) are not migrated: loading one explains that it must be removed with rc.2 and added again.
+
 ### 7.2 Permissions
 
 The web server reaches files through the docroot symlink, so every folder on the path from `~` to the served files MUST be traversable by "others".
@@ -529,7 +537,7 @@ The web server reaches files through the docroot symlink, so every folder on the
 | Path | Mode | Why |
 |---|---|---|
 | `~` | 711 (cPanel default; tool never changes it) | Apache traversal |
-| `~/cpdeploy`, `sites/`, `sites/<site>/`, `releases/`, `shared/`, `tools/` | 711 | Traversal without listing |
+| `~/cpdeploy`, `sites/`, `sites/<site>/`, `~/cpdeploy_sites`, `<site_dir>`, `releases/`, `shared/`, `tools/` | 711 | Traversal without listing |
 | Release folders and everything inside | dirs 755, files 644 (umask 022 during build); executable bits from git kept | Apache serves `public/` |
 | `shared/storage/**` | dirs 755, files 644 (Laravel defaults) | `storage/app/public` is served through `public/storage` |
 | `shared/.env`, `auth.json`, `site.yml`, `config.yml`, token, logs, history, state, backups | 600 / 700 | Secrets |
@@ -890,7 +898,7 @@ releases/<id>/
   - `Maintenance::isDown(release)` is true when `storage/framework/down` exists in that release.
 - **LAR-06 (APP_KEY).** Generated by the tool: `'base64:' . base64_encode(random_bytes(32))` (AES-256-CBC, Laravel's default). Never overwrites an existing non-empty `APP_KEY` without explicit confirmation.
 - **LAR-07 (scheduler helper).** *Laravel tools → Show scheduler cron line* prints the following and does nothing else (D7):
-  `* * * * * <site-php> <abs path>/cpdeploy/sites/<site>/current/artisan schedule:run >> /dev/null 2>&1`
+  `* * * * * <site-php> <abs path>/cpdeploy_sites/<domain>/current/artisan schedule:run >> /dev/null 2>&1`
   It uses `current`, so it follows every release. Also shown: "Add it in cPanel → Cron Jobs".
 - **LAR-08 (dangerous commands).** *Laravel tools → Run artisan command* asks the user to **type the site name** before running any of these: `migrate:fresh`, `migrate:reset`, `migrate:refresh`, `migrate:rollback`, `db:wipe`, `db:seed`, `key:generate`.
 
@@ -1022,7 +1030,8 @@ releases/<id>/
 - **FS-03 (safe delete). CRITICAL.** Deleting a release or any tree MUST NEVER follow symlinks. Releases contain links into `shared/`; following them would delete `.env` and uploads.
   - Use `rm -rf -- <path>`: GNU rm does not follow symlinks inside the tree.
   - Or use an iterator that `unlink()`s symlinks without descending.
-  - Before any recursive delete, assert that the path is inside `~/cpdeploy/sites/<site>/releases/`, `~/cpdeploy/tmp/` or `~/cpdeploy/tools/`, and is not `current`'s target. The only exception is DOC-07's "empty", which replaces a symlink, never a tree.
+  - Before any recursive delete, assert that the path is inside a site's `<site_dir>/releases/` (LAY-04), `~/cpdeploy/tmp/` or `~/cpdeploy/tools/`, has no symlinked folder above it, and is not `current`'s target. The only exception is DOC-07's "empty", which replaces a symlink, never a tree.
+  - Removing a site deletes its site folder only when it is inside the home folder, outside `~/cpdeploy`, not a symlink, and holds nothing but `current`, `releases/` and `shared/`.
   - A unit test MUST build a release containing a symlink to a sentinel folder, delete the release, and assert the sentinel still exists.
 - **FS-04 (copy).** `cp -a` for `vendor/` and build outputs; symlinks are preserved as symlinks.
 - **FS-05 (disk usage).** `du -sk`. Disk usage appears in *Site info* and the releases list, calculated lazily with a spinner.
@@ -1145,6 +1154,7 @@ name: shop                      # ^[a-z0-9][a-z0-9-]{0,30}$, unique, cannot chan
 type: laravel                   # laravel | static | php | custom
 strategy: releases              # reserved; only "releases" in v1
 created_at: "2026-09-29T03:05:12Z"
+site_dir: cpdeploy_sites/shop.example.com   # the site's folder, relative to ~ (LAY-04); set at creation, never changes
 
 repo:
   owner: acme
@@ -1611,7 +1621,7 @@ Without a token:
 
 - **WIZ-04 (Create, as a transaction).** Steps in order:
   1. Create `sites/<site>/` with the modes in §7.1, and move the temporary mirror to `repo.git`.
-  2. Create the shared skeleton (REL-03 runs at the first deploy).
+  2. Create the site folder `~/<sites_dir>/<domain>` (LAY-04; it must not exist yet) and the shared skeleton in it (REL-03 runs at the first deploy).
   3. Create the database and user (DB-01) and add the DB keys to `.env`.
   4. Write `shared/.env` (600), or copy the imported `.env`. Copy an imported `storage/` into `shared/storage/`.
   5. Test the database connection. Failure is a warning only.

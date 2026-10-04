@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cpdeploy\Wizard;
 
+use Cpdeploy\Config\Paths;
 use Cpdeploy\Config\Presets;
 use Cpdeploy\Config\SiteRegistry;
 use Cpdeploy\Cpanel\Domain;
@@ -23,6 +24,7 @@ use Cpdeploy\Runtime\NodeVersion;
 use Cpdeploy\Runtime\PhpInstall;
 use Cpdeploy\Runtime\PhpLocator;
 use Cpdeploy\Runtime\PhpService;
+use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Ui\Reporter;
 use Throwable;
 
@@ -47,6 +49,7 @@ final class SiteInspector
         private readonly NodeLocator $nodes,
         private readonly NodeResolver $resolver,
         private readonly NodeInstaller $installer,
+        private readonly Paths $paths,
     ) {
     }
 
@@ -104,6 +107,11 @@ final class SiteInspector
         $problems = $this->docroots->problems($config, $all);
         // (g) only applies to the domain's own document root; *Other folder…* is allowed to differ.
         $problems = array_values(array_filter($problems, static fn (string $p): bool => !str_contains($p, 'but cpdeploy manages')));
+        try {
+            SiteCreator::checkSiteDir($this->paths, $config->siteDir());
+        } catch (CpdeployException $e) {
+            $problems[] = $e->getMessage() . '. ' . $e->hint;
+        }
         if ($problems !== []) {
             return new DomainRow($domain, $docroot, 'unavailable: ' . self::short($problems[0]), false, $problems[0]);
         }

@@ -100,6 +100,7 @@ final class ReviewStep implements WizardStep
             ['Site', $config->name()],
             ['Repo', "{$config->repo()->fullName()} @ {$config->branch()}  ({$key})"],
             ['Domain', sprintf('%s → releases (keep %d) · serves %s', $config->domain(), $config->keepReleases(), $web)],
+            ['Folder', '~/' . $config->siteDir() . '  (current, releases, shared)'],
             ['Runtime', $php . ' · ' . $node . ($state->info?->hasComposer() ?? false ? ' · Composer ' . $config->composerVersion() : '')],
         ];
         if ($config->isLaravel()) {

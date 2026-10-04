@@ -33,6 +33,26 @@ final class GlobalConfigTest extends TestCase
     }
 
     /**
+     * @covers-req LAY-04
+     */
+    public function testSitesDir(): void
+    {
+        $config = GlobalConfig::defaults();
+        self::assertSame('cpdeploy_sites', $config->sitesDir());
+        self::assertSame('apps/sites', $config->with('sites_dir', 'apps/sites/')->sitesDir());
+
+        foreach (['', '/home/u/sites', '../sites', 'cpdeploy', 'cpdeploy/sites', 'public_html/sites', 'www'] as $bad) {
+            try {
+                $config->with('sites_dir', $bad);
+                self::fail("sites_dir accepted '{$bad}'");
+            } catch (CpdeployException $e) {
+                self::assertSame(ErrorCode::CONFIG_INVALID, $e->errorCode);
+                self::assertStringContainsString('sites_dir', $e->getMessage());
+            }
+        }
+    }
+
+    /**
      * @covers-req CFG-01
      * @covers-req SEC-01
      */

@@ -58,6 +58,7 @@ final class SiteCreator
         if ($this->sites->exists($name) || is_dir($this->paths->siteDir($name))) {
             throw new CpdeployException(ErrorCode::CONFIG_INVALID, "A site named {$name} already exists", 'Choose another site name.');
         }
+        $filesDir = self::checkSiteDir($this->paths, $config->siteDir());
         $notes = [];
         try {
             // 1. The site folder, and the mirror moved in.
@@ -75,7 +76,11 @@ final class SiteCreator
             }
             $reporter->succeed($siteDir);
 
-            // 2. The shared skeleton (REL-03 fills it at the first deploy).
+            // 2. The site's own folder (LAY-04) and the shared skeleton (REL-03 fills it at the first deploy).
+            $this->paths->useSiteDir($name, $config->siteDir());
+            $this->fs->ensureDir(dirname($filesDir), Paths::MODE_ROOT);
+            $this->fs->ensureDir($filesDir, Paths::MODE_ROOT);
+            $tx->siteFilesDir = $filesDir;
             $this->fs->ensureDir($this->paths->sharedDir($name), Paths::MODE_ROOT);
             $this->failIf('shared');
 
@@ -130,8 +135,31 @@ final class SiteCreator
     }
 
     /**
-     * WIZ-04 undo, in reverse: the database and user this run created, the site
-     * folder. The temporary mirror went into the site folder, so it goes too.
+     * LAY-04: the new site's folder, ~/<site_dir>, must not exist yet. Returns its
+     * absolute path. (That it isn't inside a domain's folder is DOC-01's check,
+     * at the wizard's domain step and before every go-live.)
+     */
+    public static function checkSiteDir(Paths $paths, string $siteDir): string
+    {
+        if ($siteDir === '') {
+            throw new CpdeployException(ErrorCode::CONFIG_INVALID, "The site's folder is unknown (no domain chosen)", 'Choose the domain first.');
+        }
+        $filesDir = $paths->fromHome($siteDir);
+        if (file_exists($filesDir) || is_link($filesDir)) {
+            throw new CpdeployException(
+                ErrorCode::CONFIG_INVALID,
+                "The folder ~/{$siteDir} already exists",
+                'Each site gets a new folder named after its domain. Move or delete that folder first (it may be left from an earlier site).',
+            );
+        }
+
+        return $filesDir;
+    }
+
+    /**
+     * WIZ-04 undo, in reverse: the database and user this run created, the
+     * site's own folder, the site folder. The temporary mirror went into the
+     * site folder, so it goes too.
      */
     public function undo(WizardState $state, WizardTransaction $tx, Reporter $reporter): void
     {
@@ -144,6 +172,14 @@ final class SiteCreator
             }
             $tx->database = null;
             $tx->user = null;
+        }
+        if ($tx->siteFilesDir !== null) {
+            try {
+                $this->fs->deleteSiteFiles($state->name);
+            } catch (Throwable $e) {
+                $reporter->warn("Couldn't remove {$tx->siteFilesDir}: " . $e->getMessage());
+            }
+            $tx->siteFilesDir = null;
         }
         if ($tx->siteDir !== null) {
             try {

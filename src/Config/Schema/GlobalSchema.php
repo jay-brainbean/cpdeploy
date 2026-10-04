@@ -20,6 +20,8 @@ final class GlobalSchema
     {
         return [
             'schema' => self::VERSION,
+            // Where new sites' folders go, relative to the home folder (LAY-04).
+            'sites_dir' => 'cpdeploy_sites',
             'defaults' => [
                 'keep_releases' => 5,
                 'sync_multiphp' => true,
@@ -72,6 +74,11 @@ final class GlobalSchema
 
         foreach (self::unknownKeys(self::defaults(), $data) as $key) {
             $warnings[] = "Unknown setting '{$key}' (a typo?) — kept but ignored";
+        }
+
+        $sitesDir = $data['sites_dir'] ?? null;
+        if (!is_string($sitesDir) || !SiteSchema::isRelativePath($sitesDir) || in_array(explode('/', $sitesDir)[0], ['cpdeploy', 'public_html', 'www'], true)) {
+            $errors[] = 'sites_dir: must be a folder inside your home folder, given relative to it (such as cpdeploy_sites), outside ~/cpdeploy and ~/public_html';
         }
 
         $keep = $data['defaults']['keep_releases'] ?? null;

@@ -21,7 +21,10 @@ abstract class DeployScenario extends TestCase
     protected LocalServer $mirror;
     protected ?LocalServer $web = null;
     protected string $docroot;
+    /** ~/cpdeploy/sites/<site>: site.yml, the mirror, logs, history, backups. */
     protected string $siteDir;
+    /** ~/cpdeploy_sites/<domain>: current, releases, shared (LAY-04). */
+    protected string $siteFiles;
     protected string $phpRoot;
 
     protected function setUp(): void
@@ -29,6 +32,7 @@ abstract class DeployScenario extends TestCase
         parent::setUp();
         $this->docroot = $this->home . '/' . self::DOMAIN;
         $this->siteDir = $this->root . '/sites/' . self::SITE;
+        $this->siteFiles = $this->home . '/cpdeploy_sites/' . self::DOMAIN;
         $this->phpRoot = $this->tmp . '/phps';
 
         // cPanel
@@ -37,7 +41,7 @@ abstract class DeployScenario extends TestCase
         $this->vhostFixture('ea-php' . str_replace('.', '', $this->phpVersion()));
         $this->uapiFixture('LangPHP', 'php_get_installed_versions', (string) json_encode(['result' => ['status' => 1, 'data' => ['versions' => ['ea-php82', 'ea-php83', 'ea-php84', 'ea-php85']]]]));
         $this->uapiFixture('LangPHP', 'php_get_system_default_version', (string) json_encode(['result' => ['status' => 1, 'data' => ['version' => 'ea-php82']]]));
-        $this->env['CPD_WATCH_LINK'] = $this->siteDir . '/current';
+        $this->env['CPD_WATCH_LINK'] = $this->siteFiles . '/current';
         mkdir($this->root, 0711, true);
 
         $this->prepareTools();
@@ -122,6 +126,7 @@ abstract class DeployScenario extends TestCase
             'schema' => 1,
             'name' => self::SITE,
             'type' => 'laravel',
+            'site_dir' => 'cpdeploy_sites/' . self::DOMAIN,
             'repo' => ['owner' => 'acme', 'name' => 'shop', 'branch' => 'main', 'transport' => 'ssh22'],
             'domain' => ['name' => self::DOMAIN, 'docroot' => $this->docroot, 'web_dir' => 'public'],
             'php' => ['version' => $this->phpVersion(), 'family' => 'ea', 'sync_multiphp' => true],
@@ -146,7 +151,7 @@ abstract class DeployScenario extends TestCase
 
     protected function writeEnv(?string $content = null): void
     {
-        $shared = $this->siteDir . '/shared';
+        $shared = $this->siteFiles . '/shared';
         if (!is_dir($shared . '/database')) {
             mkdir($shared . '/database', 0755, true);
         }
@@ -246,14 +251,14 @@ abstract class DeployScenario extends TestCase
 
     protected function current(): ?string
     {
-        $link = $this->siteDir . '/current';
+        $link = $this->siteFiles . '/current';
 
         return is_link($link) ? (string) readlink($link) : null;
     }
 
     protected function liveDir(): string
     {
-        return $this->siteDir . '/' . $this->current();
+        return $this->siteFiles . '/' . $this->current();
     }
 
     /**
@@ -262,7 +267,7 @@ abstract class DeployScenario extends TestCase
     protected function releases(): array
     {
         $out = [];
-        foreach (glob($this->siteDir . '/releases/*', GLOB_ONLYDIR) ?: [] as $dir) {
+        foreach (glob($this->siteFiles . '/releases/*', GLOB_ONLYDIR) ?: [] as $dir) {
             $data = json_decode((string) @file_get_contents($dir . '/.release.json'), true);
             $out[basename($dir)] = is_array($data) ? $data : [];
         }
@@ -290,7 +295,7 @@ abstract class DeployScenario extends TestCase
      */
     protected function artisanCalls(): array
     {
-        $file = $this->siteDir . '/shared/storage/logs/fake-artisan.log';
+        $file = $this->siteFiles . '/shared/storage/logs/fake-artisan.log';
         $out = [];
         foreach (is_file($file) ? (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []) : [] as $line) {
             /** @var array{cmd: string, args: list<string>, php: string, release: string} $call */
@@ -316,13 +321,13 @@ abstract class DeployScenario extends TestCase
     protected function assertInvariants(): void
     {
         self::assertFileDoesNotExist($this->siteDir . '/.deploy-state.json', 'state file left behind');
-        if (is_link($this->siteDir . '/current')) {
-            self::assertStringStartsWith('releases/', (string) readlink($this->siteDir . '/current'));
+        if (is_link($this->siteFiles . '/current')) {
+            self::assertStringStartsWith('releases/', (string) readlink($this->siteFiles . '/current'));
         }
         if (is_link($this->docroot)) {
             self::assertStringStartsNotWith('/', (string) readlink($this->docroot), 'LAY-01: relative docroot link');
         }
-        self::assertFileExists($this->siteDir . '/shared/.env');
+        self::assertFileExists($this->siteFiles . '/shared/.env');
     }
 
     /**

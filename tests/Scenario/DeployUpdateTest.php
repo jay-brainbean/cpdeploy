@@ -47,7 +47,7 @@ final class DeployUpdateTest extends DeployScenario
         $this->assertExit(0, $r);
         $this->assertInvariants();
         $new = $this->liveDir();
-        $old = $this->siteDir . '/releases/' . $first;
+        $old = $this->siteFiles . '/releases/' . $first;
         self::assertNotSame($old, $new);
         self::assertFileExists($new . '/vendor/composer/dumped.txt');
         self::assertStringContainsString($new, (string) file_get_contents($new . '/vendor/composer/dumped.txt'));
@@ -90,7 +90,7 @@ final class DeployUpdateTest extends DeployScenario
     {
         $first = $this->firstDeploy();
         // cPanel's MultiPHP Manager wrote a handler block into the live .htaccess.
-        $live = $this->siteDir . '/releases/' . $first . '/public/.htaccess';
+        $live = $this->siteFiles . '/releases/' . $first . '/public/.htaccess';
         file_put_contents($live, HandlerBlock::BEGIN . "\n<IfModule mime_module>\n  AddHandler application/x-httpd-ea-php82 .php .php8 .phtml\n</IfModule>\n" . HandlerBlock::END . "\n\n" . file_get_contents($live));
         $site = $this->site();
         $site['php']['version'] = '8.3';
@@ -164,7 +164,7 @@ final class DeployUpdateTest extends DeployScenario
         $sequence = array_map(static fn ($c) => $c['cmd'] . '@' . $c['release'], $calls);
         self::assertSame(['migrate@' . $first, 'down@' . $first, 'migrate@' . $new, 'up@' . $new], $sequence);
         self::assertSame('ea-php82', $calls[1]['php'], 'down runs with the live release\'s PHP');
-        self::assertFileExists($this->siteDir . '/releases/' . $first . '/storage/framework/down', 'L stays in maintenance (GL-02)');
+        self::assertFileExists($this->siteFiles . '/releases/' . $first . '/storage/framework/down', 'L stays in maintenance (GL-02)');
         self::assertFileDoesNotExist($this->liveDir() . '/storage/framework/down');
         self::assertSame(['2026_09_28_000000_add_coupons_table'], $this->releases()[$new]['migrations']['list']);
         self::assertStringContainsString('Maintenance mode was on for', $this->lastLog());
@@ -188,7 +188,7 @@ final class DeployUpdateTest extends DeployScenario
 
         $this->assertExit(5, $r);
         self::assertSame('releases/' . $first, $this->current());
-        self::assertFileDoesNotExist($this->siteDir . '/releases/' . $first . '/storage/framework/down');
+        self::assertFileDoesNotExist($this->siteFiles . '/releases/' . $first . '/storage/framework/down');
         $failed = array_filter($this->releases(), static fn ($r) => ($r['status'] ?? '') === 'failed');
         self::assertCount(1, $failed);
         self::assertStringContainsString('the site is back up on the previous release', $r['stderr']);
@@ -208,7 +208,7 @@ final class DeployUpdateTest extends DeployScenario
     public function testComposerSkipIsImpossibleWithoutVendor(): void
     {
         $first = $this->firstDeploy();
-        exec('rm -rf ' . escapeshellarg($this->siteDir . '/releases/' . $first . '/vendor'));
+        exec('rm -rf ' . escapeshellarg($this->siteFiles . '/releases/' . $first . '/vendor'));
         $this->change(['routes/web.php' => "<?php // v2\n"], 'Change a route');
 
         $refused = $this->deploy(['--composer=no', '--yes']);

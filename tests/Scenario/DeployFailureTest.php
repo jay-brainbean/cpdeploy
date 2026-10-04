@@ -117,7 +117,7 @@ final class DeployFailureTest extends DeployScenario
      */
     public function testMissingEnvBlocks(): void
     {
-        unlink($this->siteDir . '/shared/.env');
+        unlink($this->siteFiles . '/shared/.env');
 
         $r = $this->deploy(['--yes']);
 

@@ -5,9 +5,17 @@ declare(strict_types=1);
 namespace Cpdeploy\Config;
 
 use Cpdeploy\Support\Environment;
+use RuntimeException;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Every path the tool uses (§7.1). No other class builds path strings (ARC-06).
+ *
+ * A site has two folders (LAY-04): the tool's data about it in
+ * ~/cpdeploy/sites/<site> (siteDir: site.yml, the mirror, logs, history,
+ * backups, lock, state) and the site itself in ~/<site_dir>, by default
+ * ~/cpdeploy_sites/<domain> (siteFilesDir: current, releases, shared).
  */
 final class Paths
 {
@@ -18,6 +26,9 @@ final class Paths
     public const MODE_PUBLIC_DIR = 0755;
 
     private readonly string $root;
+
+    /** @var array<string, string> site => site_dir from site.yml (relative to home) */
+    private array $siteDirs = [];
 
     public function __construct(private readonly string $home, ?string $root = null)
     {
@@ -122,6 +133,22 @@ final class Paths
         return $this->root . '/sites';
     }
 
+    /**
+     * Names of the sites with a site.yml, from the folder listing alone.
+     *
+     * @return list<string>
+     */
+    public function siteNames(): array
+    {
+        $names = [];
+        foreach (glob($this->sitesDir() . '/*/site.yml') ?: [] as $file) {
+            $names[] = basename(dirname($file));
+        }
+        sort($names);
+
+        return $names;
+    }
+
     public function siteDir(string $site): string
     {
         return $this->sitesDir() . '/' . $site;
@@ -147,9 +174,42 @@ final class Paths
         return $this->siteDir($site) . '/repo.git';
     }
 
+    /**
+     * Records a site's site_dir (relative to home), so its folder is known
+     * before site.yml exists (SiteCreator) and without re-reading it.
+     */
+    public function useSiteDir(string $site, string $siteDir): void
+    {
+        $this->siteDirs[$site] = trim($siteDir, '/');
+    }
+
+    /**
+     * The site itself: current, releases/ and shared/ (LAY-04).
+     */
+    public function siteFilesDir(string $site): string
+    {
+        return $this->fromHome($this->siteDirs[$site] ??= $this->readSiteDir($site));
+    }
+
+    /**
+     * The folder new sites go in: config.yml's sites_dir, under home.
+     */
+    public function sitesFilesRoot(string $sitesDir): string
+    {
+        return $this->fromHome($sitesDir);
+    }
+
+    /**
+     * An absolute path for a path relative to the home folder.
+     */
+    public function fromHome(string $relative): string
+    {
+        return $this->home . '/' . trim($relative, '/');
+    }
+
     public function releasesDir(string $site): string
     {
-        return $this->siteDir($site) . '/releases';
+        return $this->siteFilesDir($site) . '/releases';
     }
 
     public function release(string $site, string $id): string
@@ -159,12 +219,12 @@ final class Paths
 
     public function current(string $site): string
     {
-        return $this->siteDir($site) . '/current';
+        return $this->siteFilesDir($site) . '/current';
     }
 
     public function sharedDir(string $site): string
     {
-        return $this->siteDir($site) . '/shared';
+        return $this->siteFilesDir($site) . '/shared';
     }
 
     public function sharedEnv(string $site): string
@@ -227,6 +287,22 @@ final class Paths
     public function history(string $site): string
     {
         return $this->siteDir($site) . '/history.jsonl';
+    }
+
+    private function readSiteDir(string $site): string
+    {
+        $file = $this->siteConfig($site);
+        try {
+            $data = is_file($file) ? Yaml::parseFile($file) : null;
+        } catch (ParseException) {
+            $data = null;
+        }
+        $siteDir = is_array($data) ? ($data['site_dir'] ?? null) : null;
+        if (!is_string($siteDir) || trim($siteDir, '/') === '') {
+            throw new RuntimeException("The site {$site} has no site_dir in {$file}");
+        }
+
+        return trim($siteDir, '/');
     }
 
     public function sshDir(): string

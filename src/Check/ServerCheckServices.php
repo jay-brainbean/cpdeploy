@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cpdeploy\Check;
 
 use Cpdeploy\Config\GlobalConfig;
+use Cpdeploy\Config\Paths;
 use Cpdeploy\Cpanel\CloudLinux;
 use Cpdeploy\Cpanel\DomainService;
 use Cpdeploy\Cpanel\MultiPhpService;
@@ -36,6 +37,7 @@ final class ServerCheckServices
         public readonly TokenService $tokens,
         public readonly HostKeys $hostKeys,
         public readonly Clock $clock,
+        public readonly ?Paths $paths = null,
     ) {
     }
 }

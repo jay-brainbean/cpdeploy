@@ -167,13 +167,14 @@ final class SiteRemover
                 $notes[] = ".env and uploads moved to {$keptAt}";
             }
 
-            // 6. Releases and the mirror (FS-03), then 7. the site folder.
+            // 6. Releases and the mirror (FS-03), then 7. both site folders (LAY-04).
             $reporter->start('Releases and the repository copy');
             @unlink($this->paths->current($name));
             foreach ($this->releases->all($name) as $release) {
-                $this->fs->deleteTree($release->dir);
+                $this->fs->deleteRelease($name, $release->dir);
             }
             $this->fs->deleteTree($this->paths->mirror($name));
+            $this->fs->deleteSiteFiles($name);
             $this->fs->deleteSiteFolder($name);
             $reporter->succeed('');
 

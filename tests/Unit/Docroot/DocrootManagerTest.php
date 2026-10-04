@@ -10,6 +10,7 @@ use Cpdeploy\Config\SiteConfig;
 use Cpdeploy\Cpanel\Domain;
 use Cpdeploy\Docroot\DocrootManager;
 use Cpdeploy\Docroot\HandlerBlock;
+use Cpdeploy\Services;
 use Cpdeploy\Support\Errors\CpdeployException;
 use Cpdeploy\Support\Errors\ErrorCode;
 use Cpdeploy\Tests\Support\TestCase;
@@ -19,19 +20,24 @@ use Cpdeploy\Tests\Support\TestCase;
  */
 final class DocrootManagerTest extends TestCase
 {
+    private Services $app;
     private DocrootManager $docroots;
 
     protected function setUp(): void
     {
         parent::setUp();
         mkdir($this->root . '/sites', 0711, true);
-        $this->docroots = $this->services()->docroots();
+        $this->app = $this->services();
+        $this->docroots = $this->app->docroots();
     }
 
     private function config(string $name, string $domain, string $docroot, string $webDir = 'public'): SiteConfig
     {
+        $this->app->paths()->useSiteDir($name, 'cpdeploy_sites/' . $domain);
+
         return new SiteConfig(SiteSchema::withDefaults([
             'name' => $name,
+            'site_dir' => 'cpdeploy_sites/' . $domain,
             'repo' => ['owner' => 'acme', 'name' => $name],
             'domain' => ['name' => $domain, 'docroot' => $docroot, 'web_dir' => $webDir],
             'php' => ['version' => '8.2'],
@@ -58,6 +64,22 @@ final class DocrootManagerTest extends TestCase
         $domains = $this->domains($this->home . '/public_html', ['shop.example.test' => $this->home . '/shop.example.test']);
 
         self::assertSame([], $this->docroots->problems($config, $domains));
+    }
+
+    /**
+     * @covers-req LAY-04
+     */
+    public function testTheSiteFolderMustNotBeServed(): void
+    {
+        $config = $this->config('shop', 'shop.example.test', $this->home . '/shop.example.test');
+        $served = $this->domains($this->home . '/public_html', [
+            'shop.example.test' => $this->home . '/shop.example.test',
+            'files.example.test' => $this->home . '/cpdeploy_sites',
+        ]);
+
+        $problems = implode(' ', $this->docroots->problems($config, $served));
+        self::assertStringContainsString('which files.example.test serves on the web', $problems);
+        self::assertStringContainsString('sites_dir', $problems);
     }
 
     public function testOtherDomainsInsidePublicHtml(): void
@@ -90,10 +112,10 @@ final class DocrootManagerTest extends TestCase
 
         // (c): public_html is the "main" site's symlink; an addon folder under it lives inside that site.
         $main = $this->config('main', 'main.example.test', $this->home . '/public_html');
-        $this->services()->sites()->save($main);
-        mkdir($this->root . '/sites/main/releases/r1/public/addon', 0755, true);
-        symlink('releases/r1', $this->root . '/sites/main/current');
-        symlink('cpdeploy/sites/main/current/public', $this->home . '/public_html');
+        $this->app->sites()->save($main);
+        mkdir($this->home . '/cpdeploy_sites/main.example.test/releases/r1/public/addon', 0755, true);
+        symlink('releases/r1', $this->home . '/cpdeploy_sites/main.example.test/current');
+        symlink('cpdeploy_sites/main.example.test/current/public', $this->home . '/public_html');
         $addon = $this->config('addon', 'addon.example.test', $this->home . '/public_html/addon');
         $problems = $this->docroots->problems($addon, $this->domains($this->home . '/public_html', ['addon.example.test' => $this->home . '/public_html/addon']));
         self::assertStringContainsString('lives inside another managed site (main)', implode(' ', $problems));
@@ -124,12 +146,13 @@ final class DocrootManagerTest extends TestCase
 
         self::assertSame('backups/docroot-20260929-120000', $backup);
         self::assertTrue(is_link($docroot));
-        self::assertSame('cpdeploy/sites/shop/current/public', readlink($docroot));
+        self::assertSame('cpdeploy_sites/shop.example.test/current/public', readlink($docroot));
         self::assertSame('old site', file_get_contents($this->root . '/sites/shop/' . $backup . '/index.html'));
         self::assertSame(0700, fileperms($this->root . '/sites/shop/backups') & 0777);
-        self::assertSame('t', file_get_contents($this->root . '/sites/shop/shared/docroot/.well-known/acme-challenge/token'));
-        self::assertSame('memory_limit=256M', file_get_contents($this->root . '/sites/shop/shared/docroot/.user.ini'));
-        self::assertStringContainsString('x-httpd-ea-php82', (string) file_get_contents($this->root . '/sites/shop/shared/php-handler.block'));
+        $shared = $this->home . '/cpdeploy_sites/shop.example.test/shared';
+        self::assertSame('t', file_get_contents($shared . '/docroot/.well-known/acme-challenge/token'));
+        self::assertSame('memory_limit=256M', file_get_contents($shared . '/docroot/.user.ini'));
+        self::assertStringContainsString('x-httpd-ea-php82', (string) file_get_contents($shared . '/php-handler.block'));
         self::assertCount(1, $notices);
         self::assertTrue($this->docroots->isConverted($config));
         self::assertFalse($this->docroots->needsRepoint($config));
@@ -137,7 +160,7 @@ final class DocrootManagerTest extends TestCase
         $changed = $config->with('domain.web_dir', 'web');
         self::assertTrue($this->docroots->needsRepoint($changed));
         $this->docroots->repoint($changed);
-        self::assertSame('cpdeploy/sites/shop/current/web', readlink($docroot));
+        self::assertSame('cpdeploy_sites/shop.example.test/current/web', readlink($docroot));
 
         $this->docroots->undoConversion($changed, $backup);
         self::assertFalse(is_link($docroot));
@@ -154,7 +177,7 @@ final class DocrootManagerTest extends TestCase
         $notices = [];
 
         self::assertNull($this->docroots->convert($config, '20260929-120000', $notices));
-        self::assertSame('../cpdeploy/sites/shop/current/public', readlink($this->home . '/sites/shop.example.test'));
+        self::assertSame('../cpdeploy_sites/shop.example.test/current/public', readlink($this->home . '/sites/shop.example.test'));
 
         mkdir($this->tmp . '/web');
         $this->docroots->ensureHtaccess($this->tmp . '/web');

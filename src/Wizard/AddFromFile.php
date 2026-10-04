@@ -25,9 +25,13 @@ use Symfony\Component\Yaml\Yaml;
  */
 final class AddFromFile
 {
-    /** The site.yml paths the wizard state models itself; everything else is kept as written. */
+    /**
+     * The site.yml paths the wizard state models itself; everything else is kept
+     * as written. site_dir is always ~/<sites_dir>/<domain> (LAY-04), so a value
+     * in the file is ignored.
+     */
     private const MODELLED = [
-        'schema', 'name', 'type', 'created_at',
+        'schema', 'name', 'type', 'created_at', 'site_dir',
         'repo.owner', 'repo.name', 'repo.branch', 'repo.transport', 'repo.deploy_key_id', 'repo.url',
         'domain.name', 'domain.docroot', 'domain.web_dir', 'domain.ip',
         'php.version', 'php.family', 'php.sync_multiphp',

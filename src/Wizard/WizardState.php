@@ -48,6 +48,8 @@ final class WizardState
 
     // Step 4
     public ?string $domain = null;
+    /** config.yml sites_dir: new sites go in ~/<sites_dir>/<domain> (LAY-04). */
+    public string $sitesDir = 'cpdeploy_sites';
     public ?string $docroot = null;
     public ?string $ip = null;
     /** An existing app whose .env and storage/ are copied at Create. */
@@ -101,6 +103,7 @@ final class WizardState
             'name' => $this->name,
             'type' => $this->type ?? 'laravel',
             'created_at' => $createdAt,
+            'site_dir' => $this->siteDir(),
             'repo' => [
                 'owner' => $this->repo->owner ?? '',
                 'name' => $this->repo->name ?? '',
@@ -150,6 +153,16 @@ final class WizardState
             'health_check.enabled' => $config->defaultFlag('health_check'),
         ];
         $this->syncMultiPhp = $config->defaultFlag('sync_multiphp');
+        $this->sitesDir = $config->sitesDir();
+    }
+
+    /**
+     * The new site's folder relative to home: <sites_dir>/<domain> (LAY-04), or
+     * '' while no domain is chosen.
+     */
+    public function siteDir(): string
+    {
+        return $this->domain === null || $this->domain === '' ? '' : trim($this->sitesDir, '/') . '/' . strtolower($this->domain);
     }
 
     /**

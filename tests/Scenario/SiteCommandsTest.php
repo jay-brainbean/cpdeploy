@@ -51,9 +51,9 @@ final class SiteCommandsTest extends DeployScenario
         $calls = count($this->artisanCalls());
         $set = $this->cli(['env', self::SITE, 'set', 'MAIL_HOST=smtp.example.test', '--apply']);
         $this->assertExit(0, $set);
-        self::assertStringContainsString("MAIL_HOST=smtp.example.test\n", (string) file_get_contents($this->siteDir . '/shared/.env'));
-        self::assertSame(0600, fileperms($this->siteDir . '/shared/.env') & 0777);
-        $backups = glob($this->siteDir . '/shared/env-backups/.env.*') ?: [];
+        self::assertStringContainsString("MAIL_HOST=smtp.example.test\n", (string) file_get_contents($this->siteFiles . '/shared/.env'));
+        self::assertSame(0600, fileperms($this->siteFiles . '/shared/.env') & 0777);
+        $backups = glob($this->siteFiles . '/shared/env-backups/.env.*') ?: [];
         self::assertCount(1, $backups);
         self::assertSame(0600, fileperms($backups[0]) & 0777);
         $optimize = array_values(array_filter(array_slice($this->artisanCalls(), $calls), static fn ($c) => $c['cmd'] === 'optimize'));
@@ -62,19 +62,19 @@ final class SiteCommandsTest extends DeployScenario
         self::assertSame(['env-change', ['set MAIL_HOST']], [$entry['action'], $entry['notes']]);
 
         $this->assertExit(0, $this->cli(['env', self::SITE, 'set', 'MAIL_PASSWORD=-'], "pa\$\$ word\n"));
-        self::assertStringContainsString("MAIL_PASSWORD='pa\$\$ word'", (string) file_get_contents($this->siteDir . '/shared/.env'));
+        self::assertStringContainsString("MAIL_PASSWORD='pa\$\$ word'", (string) file_get_contents($this->siteFiles . '/shared/.env'));
         self::assertSame("pa\$\$ word\n", $this->cli(['env', self::SITE, 'get', 'MAIL_PASSWORD'])['stdout']);
 
         $unset = $this->cli(['env', self::SITE, 'unset', 'MAIL_HOST']);
         $this->assertExit(0, $unset);
         self::assertStringContainsString('cpdeploy env shop apply', $unset['stdout'], 'no --apply without a terminal: a hint');
-        self::assertStringNotContainsString('MAIL_HOST', (string) file_get_contents($this->siteDir . '/shared/.env'));
+        self::assertStringNotContainsString('MAIL_HOST', (string) file_get_contents($this->siteFiles . '/shared/.env'));
 
         $restoreList = $this->cli(['env', self::SITE, 'restore']);
         $oldest = trim((string) array_slice(explode("\n", trim($restoreList['stdout'])), -1)[0]);
         $this->assertExit(2, $this->cli(['env', self::SITE, 'restore', $oldest]));
         $this->assertExit(0, $this->cli(['env', self::SITE, 'restore', $oldest, '--yes']));
-        self::assertStringNotContainsString('MAIL_', (string) file_get_contents($this->siteDir . '/shared/.env'));
+        self::assertStringNotContainsString('MAIL_', (string) file_get_contents($this->siteFiles . '/shared/.env'));
 
         $this->assertExit(2, $this->cli(['env', self::SITE, 'set', 'BAD=it\'s $x']));
         $this->assertExit(2, $this->cli(['env', self::SITE, 'get', 'NOPE']));
