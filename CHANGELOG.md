@@ -5,6 +5,11 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ## Unreleased
 
+## 1.0.0-rc.3 - 2026-10-04
+
+Sites get their own Forge-style folder. Sites added with rc.1 or rc.2 must be
+removed with rc.2 and added again.
+
 ### Changed
 
 - **Each site now has its own folder, named after its domain**, like a Laravel
