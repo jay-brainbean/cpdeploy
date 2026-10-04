@@ -22,6 +22,7 @@ final class SiteSchemaTest extends TestCase
         $data = [
             'name' => 'shop',
             'type' => $type,
+            'site_dir' => 'cpdeploy_sites/shop.example.com',
             'repo' => ['owner' => 'acme', 'name' => 'shop'],
             'domain' => ['name' => 'shop.example.com', 'docroot' => '/home/u/shop.example.com'],
             'php' => ['version' => '8.2'],
@@ -189,6 +190,37 @@ final class SiteSchemaTest extends TestCase
     }
 
     /**
+     * @covers-req LAY-04
+     */
+    public function testSiteDir(): void
+    {
+        self::assertSame([], $this->errors($this->site(['site_dir' => 'cpdeploy_sites/shop.example.com'])));
+        self::assertSame([], $this->errors($this->site(['site_dir' => 'apps/shop'])));
+        foreach (['', '/home/u/cpdeploy_sites/shop', '../shop', 'cpdeploy_sites/../x', 'cpdeploy/sites/shop', 'public_html/shop'] as $bad) {
+            self::assertStringContainsString('site_dir:', implode(' ', $this->errors($this->site(['site_dir' => $bad]))), "accepted '{$bad}'");
+        }
+    }
+
+    /**
+     * LAY-04: rc.1 and rc.2 had no site_dir; such a site is explained, not migrated.
+     */
+    public function testAnOldLayoutSiteIsExplained(): void
+    {
+        mkdir($this->root . '/sites/old', 0711, true);
+        file_put_contents($this->root . '/sites/old/site.yml', "schema: 1\nname: old\ntype: laravel\nrepo: {owner: acme, name: old}\n"
+            . "domain: {name: old.example.com, docroot: {$this->home}/old.example.com}\nphp: {version: '8.2'}\n");
+
+        try {
+            $this->services()->sites()->load('old');
+            self::fail('Expected E_CONFIG_INVALID');
+        } catch (CpdeployException $e) {
+            self::assertSame(ErrorCode::CONFIG_INVALID, $e->errorCode);
+            self::assertStringContainsString('1.0.0-rc.1 or rc.2', $e->getMessage());
+            self::assertStringContainsString('cpdeploy remove old', $e->hint);
+        }
+    }
+
+    /**
      * @covers-req CFG-01
      * @covers-req CFG-02
      */
@@ -198,7 +230,7 @@ final class SiteSchemaTest extends TestCase
         $registry = $services->sites();
         mkdir($this->root . '/sites/shop', 0711, true);
         $file = $this->root . '/sites/shop/site.yml';
-        file_put_contents($file, "schema: 1\nname: shop\ntype: laravel\nrepo: {owner: acme, name: shop}\n"
+        file_put_contents($file, "schema: 1\nname: shop\ntype: laravel\nsite_dir: cpdeploy_sites/shop.example.com\nrepo: {owner: acme, name: shop}\n"
             . "domain: {name: shop.example.com, docroot: {$this->home}/shop.example.com}\nphp: {version: '8.2'}\n");
 
         $config = $registry->load('shop');
@@ -239,6 +271,12 @@ final class SiteSchemaTest extends TestCase
 
         $config = new SiteConfig($this->site(['domain' => ['docroot' => $this->home . '/shop.example.com']]));
         self::assertSame([], $registry->docrootProblems($config));
+
+        // (b) LAY-04: not inside the site's own folder, and not containing it.
+        foreach ([$this->home . '/cpdeploy_sites/shop.example.com/public', $this->home . '/cpdeploy_sites'] as $inside) {
+            $bad = new SiteConfig($this->site(['domain' => ['docroot' => $inside]]));
+            self::assertStringContainsString("the site's folder", implode(' ', $registry->docrootProblems($bad)), $inside);
+        }
 
         // (e): another site already uses it.
         $registry->save($config);

@@ -54,6 +54,8 @@ final class SiteSchema
             'type' => 'laravel',
             'strategy' => 'releases',
             'created_at' => null,
+            // The site's folder (current, releases, shared), relative to the home folder (LAY-04).
+            'site_dir' => '',
             'repo' => [
                 'owner' => '',
                 'name' => '',
@@ -170,6 +172,11 @@ final class SiteSchema
         }
         if (($data['strategy'] ?? null) !== 'releases') {
             $errors[] = 'strategy: must be releases (the only strategy in this version)';
+        }
+
+        $siteDir = $data['site_dir'] ?? null;
+        if (!is_string($siteDir) || !self::isRelativePath($siteDir) || in_array(explode('/', $siteDir)[0], ['cpdeploy', 'public_html', 'www'], true)) {
+            $errors[] = 'site_dir: must be the site\'s folder relative to your home folder (such as cpdeploy_sites/shop.example.com), outside ~/cpdeploy and ~/public_html';
         }
 
         $repo = self::section($data, 'repo');

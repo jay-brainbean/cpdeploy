@@ -54,6 +54,7 @@ final class RemoveTest extends DeployScenario
         self::assertDirectoryExists($app . '/storage/framework');
         self::assertFileDoesNotExist($app . '/.release.json');
         $this->assertNoLinksInto($app, $this->siteDir);
+        $this->assertNoLinksInto($app, $this->siteFiles);
         self::assertStringStartsWith('shop ok', $before);
         self::assertSame('shop ok shop-app', $this->get('/'), 'the site still answers, from the copy');
 
@@ -65,6 +66,7 @@ final class RemoveTest extends DeployScenario
         self::assertFileExists($kept[0] . '/shared/.env');
         self::assertFileExists($kept[0] . '/site.yml');
         self::assertDirectoryDoesNotExist($this->siteDir);
+        self::assertDirectoryDoesNotExist($this->siteFiles);
         $history = array_map(static fn (string $l): array => (array) json_decode($l, true), file($this->root . '/removed/history.jsonl', FILE_IGNORE_NEW_LINES) ?: []);
         self::assertSame('shop', $history[0]['site']);
         self::assertSame('detach', $history[0]['docroot']);
@@ -92,6 +94,7 @@ final class RemoveTest extends DeployScenario
         self::assertSame('the old site', file_get_contents($this->docroot . '/index.html'));
         self::assertSame([], glob($this->root . '/removed/shop-*') ?: [], '--delete-shared keeps nothing');
         self::assertDirectoryDoesNotExist($this->siteDir);
+        self::assertDirectoryDoesNotExist($this->siteFiles);
     }
 
     /**
@@ -101,8 +104,8 @@ final class RemoveTest extends DeployScenario
     public function testEmptyFolderAndNeverLiveSite(): void
     {
         $this->assertExit(0, $this->deploy());
-        @mkdir($this->siteDir . '/shared/docroot/.well-known', 0755, true);
-        file_put_contents($this->siteDir . '/shared/docroot/.well-known/security.txt', 'contact');
+        @mkdir($this->siteFiles . '/shared/docroot/.well-known', 0755, true);
+        file_put_contents($this->siteFiles . '/shared/docroot/.well-known/security.txt', 'contact');
 
         // Without a terminal, the docroot choice and --yes are needed.
         $ask = $this->runCli(['remove', self::SITE]);
@@ -130,6 +133,7 @@ final class RemoveTest extends DeployScenario
         self::assertStringContainsString('never went live', $never['stdout']);
         self::assertDirectoryExists($this->docroot . '/keep');
         self::assertDirectoryDoesNotExist($this->siteDir);
+        self::assertDirectoryDoesNotExist($this->siteFiles);
     }
 
     /**
@@ -159,6 +163,7 @@ final class RemoveTest extends DeployScenario
         self::assertStringContainsString('cpdeploy · shop · Remove site', $screen);
         self::assertStringContainsString('Site shop removed', $screen);
         self::assertDirectoryDoesNotExist($this->siteDir);
+        self::assertDirectoryDoesNotExist($this->siteFiles);
         self::assertSame('shop-app/public', readlink($this->docroot));
 
         // A wrong name cancels.

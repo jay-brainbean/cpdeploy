@@ -30,13 +30,7 @@ final class SiteRegistry
      */
     public function names(): array
     {
-        $names = [];
-        foreach (glob($this->paths->sitesDir() . '/*/site.yml') ?: [] as $file) {
-            $names[] = basename(dirname($file));
-        }
-        sort($names);
-
-        return $names;
+        return $this->paths->siteNames();
     }
 
     public function exists(string $name): bool
@@ -64,6 +58,7 @@ final class SiteRegistry
                 "The name can't change after creation. Run: cpdeploy config {$name} edit",
             );
         }
+        $this->paths->useSiteDir($name, $config->siteDir());
 
         return $config;
     }
@@ -97,6 +92,16 @@ final class SiteRegistry
                 $this->fs->writeAtomic($file . '.schema' . $schema . '.bak', $raw, Paths::MODE_SECRET_FILE);
             }
             $data = SiteSchema::migrate($data, $schema);
+        }
+
+        if (!array_key_exists('site_dir', $data)) {
+            // LAY-04: rc.1 and rc.2 kept the site's files in ~/cpdeploy/sites/<site>; there is no migration.
+            throw new CpdeployException(
+                ErrorCode::CONFIG_INVALID,
+                "{$file} was made by cpdeploy 1.0.0-rc.1 or rc.2, which kept the site's files in ~/cpdeploy/sites/{$site}. "
+                . 'This version keeps them in their own folder (~/cpdeploy_sites/<domain>).',
+                "Remove the site with cpdeploy 1.0.0-rc.2 (cpdeploy remove {$site}), then add it again with this version.",
+            );
         }
 
         $type = is_string($data['type'] ?? null) ? $data['type'] : 'laravel';
@@ -134,6 +139,7 @@ final class SiteRegistry
         }
         $this->fs->ensureDir($this->paths->siteDir($config->name()), Paths::MODE_ROOT);
         $this->fs->writeAtomic($file, self::dump($config), Paths::MODE_SECRET_FILE);
+        $this->paths->useSiteDir($config->name(), $config->siteDir());
     }
 
     public static function dump(SiteConfig $config): string
@@ -143,8 +149,9 @@ final class SiteRegistry
 
     /**
      * DOC-01 rules that only need the paths and the other sites (VAL-03):
-     * (a) inside $HOME and not $HOME; (b) not inside ~/cpdeploy and not containing it;
-     * (c) its parent's real path isn't inside another managed site;
+     * (a) inside $HOME and not $HOME; (b) not inside ~/cpdeploy or the site's
+     * own folder (site_dir), and not containing them; (c) its parent's real path
+     * isn't inside another managed site (either of its folders);
      * (e) no other site uses the same docroot.
      *
      * @return list<string>
@@ -166,20 +173,35 @@ final class SiteRegistry
         if ($normal === $root || Fs::isInside($normal, $root) || Fs::isInside($root, $normal)) {
             $problems[] = "domain.docroot: {$docroot} can't be inside ~/cpdeploy or contain it";
         }
+        if ($config->siteDir() !== '') {
+            $siteFiles = Fs::normalize($this->paths->fromHome($config->siteDir()));
+            if ($normal === $siteFiles || Fs::isInside($normal, $siteFiles) || Fs::isInside($siteFiles, $normal)) {
+                $problems[] = "domain.docroot: {$docroot} can't be inside the site's folder ~/{$config->siteDir()} or contain it";
+            }
+        }
 
         $parent = realpath(dirname($normal));
         foreach ($this->names() as $other) {
             if ($other === $config->name()) {
                 continue;
             }
-            $otherDir = $this->paths->siteDir($other);
-            $realOther = realpath($otherDir) ?: $otherDir;
-            if ($parent !== false && ($parent === $realOther || Fs::isInside($parent, $realOther))) {
-                $problems[] = "domain.docroot: this domain's folder lives inside another managed site ({$other}). Change its document root in cPanel → Domains to a folder outside it, e.g. ~/" . $config->domain();
-            }
             try {
                 $otherConfig = $this->load($other);
             } catch (CpdeployException) {
+                $otherConfig = null;
+            }
+            $otherDirs = [$this->paths->siteDir($other)];
+            if ($otherConfig !== null && $otherConfig->siteDir() !== '') {
+                $otherDirs[] = $this->paths->fromHome($otherConfig->siteDir());
+            }
+            foreach ($otherDirs as $otherDir) {
+                $realOther = realpath($otherDir) ?: $otherDir;
+                if ($parent !== false && ($parent === $realOther || Fs::isInside($parent, $realOther))) {
+                    $problems[] = "domain.docroot: this domain's folder lives inside another managed site ({$other}). Change its document root in cPanel → Domains to a folder outside it, e.g. ~/" . $config->domain();
+                    break;
+                }
+            }
+            if ($otherConfig === null) {
                 continue;
             }
             if (Fs::normalize($otherConfig->docroot()) === $normal) {

@@ -65,6 +65,7 @@ final class SiteCheck
         if ($config->isLaravel() || in_array('.env', $config->sharedFiles(), true)) {
             $checks[] = $this->env($config);
         }
+        $checks[] = CheckResult::info('site.folder', 'Site folder ' . $this->paths->siteFilesDir($site) . ' (current, releases, shared)');
         $checks[] = $this->docroot($config, $live);
         if ($config->isLaravel() && $live !== null) {
             $checks[] = $this->rewrites($config, $live);

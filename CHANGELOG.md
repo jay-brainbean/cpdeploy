@@ -5,6 +5,24 @@ All notable changes to cpdeploy are listed here. Versions follow
 
 ## Unreleased
 
+### Changed
+
+- **Each site now has its own folder, named after its domain**, like a Laravel
+  Forge site: `~/cpdeploy_sites/<domain>/` holds `current`, `releases/` and
+  `shared/` (`.env`, `storage/`). cpdeploy's own data about the site (settings,
+  the repository copy, logs, history, docroot backups) stays in
+  `~/cpdeploy/sites/<site>/`. The domain's folder links to
+  `~/cpdeploy_sites/<domain>/current/public` as before.
+- The folder for new sites is `sites_dir` in `config.yml` (Settings → Defaults
+  for new sites), default `cpdeploy_sites`. It must be outside every domain's
+  folder; `cpdeploy check` reports it, and a deploy refuses a site folder a
+  domain would serve.
+- Each site's folder is recorded in `site.yml` as `site_dir` and can't be
+  changed afterwards. *Site info* and `cpdeploy check <site>` show it.
+- **Sites added with 1.0.0-rc.1 or rc.2 can't be used with this version**: there
+  is no migration. Remove them with rc.2 (`cpdeploy remove <site>`) before
+  updating, then add them again.
+
 ## 1.0.0-rc.2 - 2026-10-03
 
 Fixes from testing rc.1 on a real cPanel account.

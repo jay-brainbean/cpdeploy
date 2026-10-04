@@ -193,7 +193,7 @@ final class ReleaseManager
         foreach ($selection['delete'] as $release) {
             $size = $this->fs->diskUsageKb($release->dir) ?? 0;
             try {
-                $this->fs->deleteTree($release->dir);
+                $this->fs->deleteRelease($site, $release->dir);
                 $removed++;
                 $freed += $size;
             } catch (RuntimeException $e) {
@@ -222,7 +222,7 @@ final class ReleaseManager
         if ($release->id === $this->liveId($site)) {
             throw new CpdeployException(ErrorCode::USAGE, "{$id} is the live release and can't be deleted", 'Deploy or roll back to another release first.');
         }
-        $this->fs->deleteTree($release->dir);
+        $this->fs->deleteRelease($site, $release->dir);
     }
 
     /**

@@ -163,6 +163,16 @@ final class GlobalConfig
         return is_string($value) ? $value : GlobalSchema::DEFAULT_UPDATE_REPO;
     }
 
+    /**
+     * Where new sites' folders go, relative to the home folder (LAY-04).
+     */
+    public function sitesDir(): string
+    {
+        $value = $this->data['sites_dir'] ?? null;
+
+        return is_string($value) && $value !== '' ? rtrim($value, '/') : (string) GlobalSchema::defaults()['sites_dir'];
+    }
+
     public function defaultKeepReleases(): int
     {
         $value = $this->data['defaults']['keep_releases'] ?? 5;

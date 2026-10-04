@@ -101,7 +101,7 @@ final class MenuTest extends DeployScenario
      */
     public function testGenerateAppKeyInlineAndDeploy(): void
     {
-        $env = (string) file_get_contents($this->siteDir . '/shared/.env');
+        $env = (string) file_get_contents($this->siteFiles . '/shared/.env');
         $this->writeEnv((string) preg_replace('/^APP_KEY=.*$/m', 'APP_KEY=', $env));
 
         $screen = $this->menu([
@@ -114,8 +114,8 @@ final class MenuTest extends DeployScenario
 
         self::assertStringContainsString('APP_KEY generated and saved to .env', $screen);
         // ENV-04: "=" isn't in the unquoted set, so the key is written in double quotes.
-        self::assertMatchesRegularExpression('/^APP_KEY="base64:[A-Za-z0-9+\/=]{44}"$/m', (string) file_get_contents($this->siteDir . '/shared/.env'));
-        $backups = glob($this->siteDir . '/shared/env-backups/.env.*') ?: [];
+        self::assertMatchesRegularExpression('/^APP_KEY="base64:[A-Za-z0-9+\/=]{44}"$/m', (string) file_get_contents($this->siteFiles . '/shared/.env'));
+        $backups = glob($this->siteFiles . '/shared/env-backups/.env.*') ?: [];
         self::assertCount(1, $backups);
         self::assertStringContainsString("APP_KEY=\n", (string) file_get_contents($backups[0]));
         $deploy = array_values(array_filter($this->history(), static fn ($e) => $e['action'] === 'deploy'))[0];
@@ -376,10 +376,10 @@ final class MenuTest extends DeployScenario
             ['Manage shop', MenuContext::BACK],
             $this->main('quit'),
         ]);
-        self::assertStringContainsString("EDITED_IN_EDITOR=1\n", (string) file_get_contents($this->siteDir . '/shared/.env'));
-        self::assertStringContainsString("MAIL_PASSWORD=hunter2hunter2\n", (string) file_get_contents($this->siteDir . '/shared/.env'));
+        self::assertStringContainsString("EDITED_IN_EDITOR=1\n", (string) file_get_contents($this->siteFiles . '/shared/.env'));
+        self::assertStringContainsString("MAIL_PASSWORD=hunter2hunter2\n", (string) file_get_contents($this->siteFiles . '/shared/.env'));
 
-        $backups = array_map('basename', glob($this->siteDir . '/shared/env-backups/.env.*') ?: []);
+        $backups = array_map('basename', glob($this->siteFiles . '/shared/env-backups/.env.*') ?: []);
         sort($backups);
         $screen .= $this->menu([
             $this->main('manage'),
@@ -394,12 +394,12 @@ final class MenuTest extends DeployScenario
             $this->main('quit'),
         ]);
 
-        $env = (string) file_get_contents($this->siteDir . '/shared/.env');
+        $env = (string) file_get_contents($this->siteFiles . '/shared/.env');
         self::assertStringContainsString('supersecretpassword', $screen, 'Reveal shows secrets');
         self::assertSame(1, substr_count($screen, 'supersecretpassword'), 'View masks them');
         self::assertStringContainsString('APP_URL=', $env, 'the oldest backup (before any change) was restored');
         self::assertStringNotContainsString('EDITED_IN_EDITOR', $env);
-        self::assertCount(5, glob($this->siteDir . '/shared/env-backups/.env.*') ?: []);
+        self::assertCount(5, glob($this->siteFiles . '/shared/env-backups/.env.*') ?: []);
         self::assertStringNotContainsString('hunter2hunter2', $screen);
     }
 
@@ -417,8 +417,8 @@ final class MenuTest extends DeployScenario
         $this->change(['database/migrations/2026_02_01_000000_add_coupons.php' => "<?php // coupons\n"], 'A migration');
         // Put the new migration file into the live release, as if deployed without migrating.
         copy($this->repo->work . '/database/migrations/2026_02_01_000000_add_coupons.php', $this->liveDir() . '/database/migrations/2026_02_01_000000_add_coupons.php');
-        @mkdir($this->siteDir . '/shared/storage/logs', 0755, true); // shared by the deploy already
-        file_put_contents($this->siteDir . '/shared/storage/logs/laravel.log', "[2026-09-29] production.ERROR: Something broke\n");
+        @mkdir($this->siteFiles . '/shared/storage/logs', 0755, true); // shared by the deploy already
+        file_put_contents($this->siteFiles . '/shared/storage/logs/laravel.log', "[2026-09-29] production.ERROR: Something broke\n");
 
         $screen = $this->menu([
             $this->main('manage'),
@@ -458,7 +458,7 @@ final class MenuTest extends DeployScenario
         self::assertStringContainsString('Pending: 2026_02_01_000000_add_coupons', $screen);
         self::assertStringContainsString('1 migration ran', $screen);
         self::assertStringContainsString('Something broke', (string) @file_get_contents($this->paged));
-        self::assertStringContainsString($this->siteDir . '/current/artisan schedule:run >> /dev/null 2>&1', $screen);
+        self::assertStringContainsString($this->siteFiles . '/current/artisan schedule:run >> /dev/null 2>&1', $screen);
         self::assertFileDoesNotExist($this->liveDir() . '/storage/framework/down');
     }
 
@@ -507,11 +507,11 @@ final class MenuTest extends DeployScenario
         self::assertSame('release', $this->site()['repo']['branch']);
         self::assertStringContainsString('is missing — rotate it to create a new one', $screen);
         self::assertStringContainsString('can read the repository (2 branches)', $screen);
-        self::assertFileDoesNotExist($this->siteDir . '/shared/auth.json');
+        self::assertFileDoesNotExist($this->siteFiles . '/shared/auth.json');
         self::assertStringContainsString('auth.json saved', $screen);
         self::assertStringContainsString('result: success', (string) @file_get_contents($this->paged));
         self::assertStringContainsString('No failed operations.', $screen);
-        self::assertStringContainsString($this->docroot . ' → ' . $this->siteDir . '/current/public', $screen);
+        self::assertStringContainsString($this->docroot . ' → ' . $this->siteFiles . '/current/public', $screen);
         self::assertMatchesRegularExpression('/Releases\s+\d+(\.\d)? [KMG]B/', $screen);
         self::assertStringContainsString('cpdeploy · shop · Remove site', $screen);
         self::assertDirectoryExists($this->siteDir, 'Back at the first Remove site question removes nothing');

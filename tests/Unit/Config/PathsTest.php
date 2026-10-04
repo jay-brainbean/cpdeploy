@@ -28,12 +28,46 @@ final class PathsTest extends TestCase
         self::assertSame('/home/brainbean/cpdeploy/sites/shop/site.yml', $p->siteConfig('shop'));
         self::assertSame('/home/brainbean/cpdeploy/sites/shop/.deploy-state.json', $p->stateFile('shop'));
         self::assertSame('/home/brainbean/cpdeploy/sites/shop/repo.git', $p->mirror('shop'));
-        self::assertSame('/home/brainbean/cpdeploy/sites/shop/releases/20260929-030512', $p->release('shop', '20260929-030512'));
-        self::assertSame('/home/brainbean/cpdeploy/sites/shop/current', $p->current('shop'));
-        self::assertSame('/home/brainbean/cpdeploy/sites/shop/shared/.env', $p->sharedEnv('shop'));
-        self::assertSame('/home/brainbean/cpdeploy/sites/shop/shared/env-backups', $p->envBackupsDir('shop'));
         self::assertSame('/home/brainbean/cpdeploy/sites/shop/history.jsonl', $p->history('shop'));
+        self::assertSame('/home/brainbean/cpdeploy/sites/shop/logs', $p->logsDir('shop'));
+        self::assertSame('/home/brainbean/cpdeploy/sites/shop/backups', $p->backupsDir('shop'));
+
+        // LAY-04: the site itself lives in its site_dir.
+        $p->useSiteDir('shop', 'cpdeploy_sites/shop.example.com/');
+        self::assertSame('/home/brainbean/cpdeploy_sites/shop.example.com', $p->siteFilesDir('shop'));
+        self::assertSame('/home/brainbean/cpdeploy_sites/shop.example.com/releases/20260929-030512', $p->release('shop', '20260929-030512'));
+        self::assertSame('/home/brainbean/cpdeploy_sites/shop.example.com/current', $p->current('shop'));
+        self::assertSame('/home/brainbean/cpdeploy_sites/shop.example.com/shared/.env', $p->sharedEnv('shop'));
+        self::assertSame('/home/brainbean/cpdeploy_sites/shop.example.com/shared/env-backups', $p->envBackupsDir('shop'));
+        self::assertSame('/home/brainbean/cpdeploy_sites', $p->sitesFilesRoot('cpdeploy_sites'));
         self::assertSame('/home/brainbean/.ssh/cpdeploy_shop', $p->deployKey('shop'));
+    }
+
+    /**
+     * @covers-req LAY-04
+     */
+    public function testSiteDirIsReadFromSiteYml(): void
+    {
+        $home = sys_get_temp_dir() . '/cpd-paths-' . bin2hex(random_bytes(4));
+        mkdir($home . '/cpdeploy/sites/shop', 0711, true);
+        mkdir($home . '/cpdeploy/sites/old', 0711, true);
+        file_put_contents($home . '/cpdeploy/sites/shop/site.yml', "name: shop\nsite_dir: cpdeploy_sites/shop.example.com\n");
+        file_put_contents($home . '/cpdeploy/sites/old/site.yml', "name: old\n");
+        $p = new Paths($home);
+        try {
+            self::assertSame(['old', 'shop'], $p->siteNames());
+            self::assertSame($home . '/cpdeploy_sites/shop.example.com/current', $p->current('shop'));
+            $this->expectExceptionMessage('has no site_dir');
+            $p->current('old');
+        } finally {
+            @unlink($home . '/cpdeploy/sites/shop/site.yml');
+            @unlink($home . '/cpdeploy/sites/old/site.yml');
+            @rmdir($home . '/cpdeploy/sites/shop');
+            @rmdir($home . '/cpdeploy/sites/old');
+            @rmdir($home . '/cpdeploy/sites');
+            @rmdir($home . '/cpdeploy');
+            @rmdir($home);
+        }
     }
 
     /**

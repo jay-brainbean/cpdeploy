@@ -200,6 +200,7 @@ by the wizard. The smallest useful file:
 schema: 1
 name: shop
 type: laravel                     # laravel | static | php | custom
+site_dir: cpdeploy_sites/shop.example.com   # the site's folder, relative to ~ (never changes)
 repo: { owner: acme, name: shop, branch: main }
 domain: { name: shop.example.com, docroot: /home/you/shop.example.com }
 php: { version: "8.3" }
@@ -210,7 +211,8 @@ Every other setting has a default (see the plan, §8.2 and §8.4). Change it wit
 
 - the deploy key `~/.ssh/cpdeploy_shop`, added to the repository on GitHub
   (read-only);
-- for Laravel, `~/cpdeploy/sites/shop/shared/.env` (mode 600) with `APP_KEY` set.
+- the site's folder `~/cpdeploy_sites/<domain>` (see [Files cpdeploy creates](#files-cpdeploy-creates));
+- for Laravel, `~/cpdeploy_sites/<domain>/shared/.env` (mode 600) with `APP_KEY` set.
   The frontend build runs with this production `.env`, so `VITE_*` values come
   from it.
 
@@ -231,7 +233,7 @@ A deploy:
    database, disk space, the document root) — nothing has changed yet;
 3. asks its questions up front: `composer install` (skip = reuse the live
    `vendor/`), the frontend build when set to ask, migrations, seeding;
-4. builds a new release in `~/cpdeploy/sites/shop/releases/<id>`: the commit,
+4. builds a new release in `~/cpdeploy_sites/<domain>/releases/<id>`: the commit,
    the shared files (`.env`, `storage/`), `composer install`, `npm ci` and
    `npm run build`, `php artisan storage:link` and `php artisan optimize` —
    all with the site's own PHP and Node;
@@ -347,7 +349,7 @@ cpdeploy logs shop                    # history; logs shop --last, <release id>,
 ```
 
 Every `.env` change is saved with a backup in
-`~/cpdeploy/sites/<site>/shared/env-backups/` (the last 10 are kept). Laravel
+`~/cpdeploy_sites/<domain>/shared/env-backups/` (the last 10 are kept). Laravel
 caches its config per release, so a change reaches the live site after
 `env apply` (`--apply`, or say Yes on a terminal) or the next deploy.
 
@@ -428,7 +430,8 @@ bash install.sh --uninstall
 ```
 
 This removes the `cpdeploy` command and `~/cpdeploy/app`. Your sites keep
-running; their data stays in `~/cpdeploy/sites`.
+running; their files stay in `~/cpdeploy_sites` and their settings in
+`~/cpdeploy/sites`.
 
 ## Files cpdeploy creates
 
@@ -442,8 +445,9 @@ running; their data stays in `~/cpdeploy/sites`.
 | `~/.ssh/cpdeploy_<site>` | Each site's deploy key |
 | `~/cpdeploy/tools/` | Downloaded Composer and Node, shared by all sites |
 | `~/cpdeploy/removed/` | What *Remove site* kept (`shared/`, `site.yml`) and its history |
-| `~/cpdeploy/sites/<site>/` | `site.yml`, `releases/`, `current`, `shared/`, `backups/`, `logs/`, `history.jsonl` |
-| `<docroot>` | After the first deploy: a symlink to `~/cpdeploy/sites/<site>/current/<web_dir>` |
+| `~/cpdeploy/sites/<site>/` | The site's settings and records: `site.yml`, the repository copy (`repo.git`), `backups/`, `logs/`, `history.jsonl` |
+| `~/cpdeploy_sites/<domain>/` | The site itself, like a Forge site folder: `current`, `releases/`, `shared/` (`.env`, `storage/`) |
+| `<docroot>` | After the first deploy: a symlink to `~/cpdeploy_sites/<domain>/current/<web_dir>` |
 
 ## Development
 

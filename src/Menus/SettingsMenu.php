@@ -125,6 +125,7 @@ final class SettingsMenu
             $config = $this->ctx->services->config();
             $this->ctx->title('Settings', 'Defaults for new sites');
             $choice = $this->ctx->choose('Defaults for new sites', [
+                'sites' => 'Sites folder: ~/' . $config->sitesDir() . '/<domain>',
                 'keep' => 'Keep last ' . $config->defaultKeepReleases() . ' releases',
                 'sync' => 'Set the domain\'s MultiPHP version at go-live: ' . ($config->defaultFlag('sync_multiphp') ? 'yes' : 'no'),
                 'health' => 'Health check after go-live: ' . ($config->defaultFlag('health_check') ? 'on' : 'off'),
@@ -135,6 +136,12 @@ final class SettingsMenu
             $this->ctx->attempt(function () use ($choice, $config): void {
                 $services = $this->ctx->services;
                 match ($choice) {
+                    'sites' => $services->changeConfig(['sites_dir' => trim(preg_replace('#^~/#', '', trim($this->ctx->asker->text(
+                        'Folder for new sites, inside your home folder (existing sites stay where they are)',
+                        '~/' . $config->sitesDir(),
+                        '~/cpdeploy_sites',
+                        required: true,
+                    ))) ?? '', '/')]),
                     'keep' => $services->changeConfig(['defaults.keep_releases' => (int) $this->ctx->asker->text('Keep how many releases? (1–50, counting the live one)', (string) $config->defaultKeepReleases(), required: true, validate: static fn (string $v): ?string => ctype_digit($v) && (int) $v >= 1 && (int) $v <= 50 ? null : 'A whole number from 1 to 50')]),
                     'sync' => $services->changeConfig(['defaults.sync_multiphp' => $this->ctx->asker->confirm("Set the domain's MultiPHP version at go-live for new sites?", $config->defaultFlag('sync_multiphp'))]),
                     'health' => $services->changeConfig(['defaults.health_check' => $this->ctx->asker->confirm('Check new sites after each go-live?', $config->defaultFlag('health_check'))]),
@@ -226,6 +233,7 @@ final class SettingsMenu
             'Phar' => $phar !== '' ? $phar : 'not a phar (running from the source folder)',
             'Config' => $paths->configFile(),
             'Sites' => $paths->sitesDir(),
+            'Site files' => $paths->sitesFilesRoot($services->config()->sitesDir()),
             'Known hosts' => $paths->knownHosts(),
             'Update repo' => $services->config()->updateRepo() . ($services->config()->updateRepo() === GlobalSchema::DEFAULT_UPDATE_REPO ? '' : ' (changed in config.yml)'),
         ] as $label => $value) {

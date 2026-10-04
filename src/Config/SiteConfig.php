@@ -106,6 +106,14 @@ final class SiteConfig
         return $this->str('domain.name');
     }
 
+    /**
+     * The site's folder (current, releases, shared), relative to the home folder (LAY-04).
+     */
+    public function siteDir(): string
+    {
+        return trim($this->str('site_dir'), '/');
+    }
+
     public function docroot(): string
     {
         return rtrim($this->str('domain.docroot'), '/');

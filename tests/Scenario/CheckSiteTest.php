@@ -35,7 +35,7 @@ final class CheckSiteTest extends DeployScenario
         self::assertSame('info', $site['site.current']['status']);
 
         $this->assertExit(0, $this->deploy());
-        chmod($this->siteDir . '/shared/.env', 0644);
+        chmod($this->siteFiles . '/shared/.env', 0644);
 
         $after = $this->check(['check', self::SITE, '--json', '--probe']);
         $site = $this->group($after, 'Site shop');
@@ -50,12 +50,12 @@ final class CheckSiteTest extends DeployScenario
         $served = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
         self::assertSame($served === '8.2' ? 'ok' : 'fail', $site['site.probe']['status']);
         self::assertStringContainsString('The domain serves PHP ' . $served, $site['site.probe']['message']);
-        self::assertSame([], glob($this->siteDir . '/current/public/.cpd-probe-*') ?: [], 'the probe file is removed');
+        self::assertSame([], glob($this->siteFiles . '/current/public/.cpd-probe-*') ?: [], 'the probe file is removed');
 
         // Plain output offers the .env fix; --yes applies it.
         $r = $this->runCli(['check', self::SITE, '--yes']);
         self::assertStringContainsString('shared/.env is now 600', $r['stdout']);
-        self::assertSame(0600, fileperms($this->siteDir . '/shared/.env') & 0777);
+        self::assertSame(0600, fileperms($this->siteFiles . '/shared/.env') & 0777);
 
         $unknown = $this->runCli(['check', 'nope']);
         $this->assertExit(2, $unknown);

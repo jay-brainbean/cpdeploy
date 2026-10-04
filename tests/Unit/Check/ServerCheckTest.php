@@ -6,6 +6,7 @@ namespace Cpdeploy\Tests\Unit\Check;
 
 use Cpdeploy\Check\CheckResult;
 use Cpdeploy\Check\ServerCheck;
+use Cpdeploy\Cpanel\Domain;
 use Cpdeploy\Support\Environment;
 use Cpdeploy\Support\SystemInfo;
 use Cpdeploy\Tests\Support\TestCase;
@@ -115,6 +116,22 @@ final class ServerCheckTest extends TestCase
 
         $this->fakeBin('git', "#!/bin/sh\necho 'git version 2.1.0'\n");
         self::assertSame(CheckResult::FAIL, $this->byId(new ServerCheck($this->services()->shell(), $this->system()))['programs.git']->status);
+    }
+
+    /**
+     * @covers-req LAY-04
+     */
+    public function testSitesFolderMustBeOutsideEveryDomainsFolder(): void
+    {
+        $domains = [
+            new Domain('main.example.test', Domain::MAIN, '/home/u/public_html', '192.0.2.10'),
+            new Domain('alias.example.test', Domain::PARKED, '/home/u/cpdeploy_sites', '192.0.2.10'),
+        ];
+        self::assertSame(CheckResult::OK, ServerCheck::sitesFolder('/home/u/cpdeploy_sites', $domains)->status);
+
+        $inside = ServerCheck::sitesFolder('/home/u/public_html/sites', $domains);
+        self::assertSame(CheckResult::FAIL, $inside->status);
+        self::assertStringContainsString('main.example.test serves on the web', $inside->message);
     }
 
     public function testMissingUapiMeansNotCpanel(): void

@@ -84,8 +84,10 @@ final class ReleaseManagerTest extends TestCase
     public function testCreateCollisionsPruneAndLive(): void
     {
         mkdir($this->root . '/sites/shop', 0711, true);
-        mkdir($this->root . '/sites/shop/shared/storage', 0755, true);
-        file_put_contents($this->root . '/sites/shop/shared/storage/sentinel', 'keep me');
+        file_put_contents($this->root . '/sites/shop/site.yml', "name: shop\nsite_dir: cpdeploy_sites/shop.example.test\n");
+        $files = $this->home . '/cpdeploy_sites/shop.example.test';
+        mkdir($files . '/shared/storage', 0755, true);
+        file_put_contents($files . '/shared/storage/sentinel', 'keep me');
         $manager = $this->manager();
         $fs = $this->services()->fs();
 
@@ -100,7 +102,7 @@ final class ReleaseManagerTest extends TestCase
             $r->set('status', Release::READY);
             $r->save($fs);
         }
-        $fs->linkRelative($this->root . '/sites/shop/current', $b->dir);
+        $fs->linkRelative($files . '/current', $b->dir);
         self::assertSame($b->id, $manager->liveId('shop'));
 
         $manager->markLive($b, $a);
@@ -116,7 +118,7 @@ final class ReleaseManagerTest extends TestCase
 
         $manager->delete('shop', $a->id);
         self::assertDirectoryDoesNotExist($a->dir);
-        self::assertSame('keep me', file_get_contents($this->root . '/sites/shop/shared/storage/sentinel'));
+        self::assertSame('keep me', file_get_contents($files . '/shared/storage/sentinel'));
 
         $this->expectExceptionMessage('is the live release');
         $manager->delete('shop', $b->id);

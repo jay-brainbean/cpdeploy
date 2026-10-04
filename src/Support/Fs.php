@@ -151,10 +151,10 @@ final class Fs
     /**
      * FS-03 (CRITICAL): delete a tree without ever following a symlink.
      *
-     * Allowed only strictly inside tmp/, tools/ or a site's releases/ folder, or
-     * a site's bare mirror (repo.git, repo.git.broken-<ts>), and never the target
-     * of a site's `current` link. A symlink at $path itself is
-     * unlinked, not descended into.
+     * Allowed only strictly inside tmp/, tools/ or a site's releases/ folder
+     * (in its site_dir, LAY-04), or a site's bare mirror (repo.git,
+     * repo.git.broken-<ts>), and never the target of a site's `current` link.
+     * A symlink at $path itself is unlinked, not descended into.
      */
     public function deleteTree(string $path): void
     {
@@ -188,6 +188,53 @@ final class Fs
     }
 
     /**
+     * FS-03 for one release: $dir must be exactly <site folder>/releases/<id>,
+     * with no symlink above it, and never the target of the site's `current` link.
+     */
+    public function deleteRelease(string $site, string $dir): void
+    {
+        $normal = self::normalize($dir);
+        $releases = self::normalize($this->paths->releasesDir($site));
+        if (dirname($normal) !== $releases || in_array(basename($normal), ['', '.', '..'], true)) {
+            throw new RuntimeException("Refusing to delete {$dir}: not a release of {$site}");
+        }
+        $this->assertNoSymlinkAbove($normal, self::normalize($this->paths->siteFilesDir($site)));
+        $this->assertNotLive($site, $normal, $dir);
+        if (!is_link($normal) && !file_exists($normal)) {
+            return;
+        }
+        $this->deleteNoFollow($normal);
+    }
+
+    /**
+     * Removes a site's own folder (site_dir: current, releases, shared) when the
+     * site is removed or its Create failed. It must be inside the home folder and
+     * outside ~/cpdeploy, not a symlink, and hold nothing but current, releases
+     * and shared — so a hand-edited site_dir can never point it at other files.
+     */
+    public function deleteSiteFiles(string $site): void
+    {
+        $dir = self::normalize($this->paths->siteFilesDir($site));
+        $home = self::normalize($this->paths->home());
+        $root = self::normalize($this->paths->root());
+        if (!self::isInside($dir, $home) || $dir === $root || self::isInside($dir, $root) || self::isInside($root, $dir)) {
+            throw new RuntimeException("Refusing to delete {$dir}: it must be a folder in your home folder, outside ~/cpdeploy");
+        }
+        if (is_link($dir)) {
+            throw new RuntimeException("Refusing to delete {$dir}: it is a symlink");
+        }
+        if (!is_dir($dir)) {
+            return;
+        }
+        $this->assertNoSymlinkAbove($dir, $home);
+        $other = array_diff(scandir($dir) ?: [], ['.', '..', 'current', 'releases', 'shared']);
+        if ($other !== []) {
+            throw new RuntimeException("Refusing to delete {$dir}: it holds files cpdeploy didn't put there (" . implode(', ', array_slice($other, 0, 5)) . ')');
+        }
+        $this->deleteNoFollow($dir);
+    }
+
+    /**
      * Throws unless deleteTree() may remove $path.
      */
     public function assertDeletable(string $path): void
@@ -200,16 +247,28 @@ final class Fs
                 break;
             }
         }
-        $sitesDir = self::normalize($this->paths->sitesDir());
+        // <site_dir>/releases/<id>[/…] of a known site.
         $releaseSite = null;
+        $base = self::normalize($this->paths->root());
+        if (!$allowed) {
+            foreach ($this->paths->siteNames() as $site) {
+                try {
+                    $files = self::normalize($this->paths->siteFilesDir($site));
+                } catch (RuntimeException) {
+                    continue;
+                }
+                if (self::isInside($normal, $files . '/releases')) {
+                    $allowed = true;
+                    $releaseSite = $site;
+                    $base = $files;
+                    break;
+                }
+            }
+        }
+        $sitesDir = self::normalize($this->paths->sitesDir());
         if (!$allowed && self::isInside($normal, $sitesDir)) {
             $relative = substr($normal, strlen($sitesDir) + 1);
             $parts = explode('/', $relative);
-            // sites/<site>/releases/<id>[/…]
-            if (count($parts) >= 3 && $parts[1] === 'releases' && $parts[2] !== '') {
-                $allowed = true;
-                $releaseSite = $parts[0];
-            }
             // sites/<site>/repo.git and repo.git.broken-<ts>: the bare mirror (GIT-16 repair).
             if (count($parts) === 2 && preg_match('/^repo\.git(\.broken-[0-9-]+)?$/', $parts[1]) === 1) {
                 $allowed = true;
@@ -219,24 +278,35 @@ final class Fs
             throw new RuntimeException("Refusing to delete {$path}: outside the folders cpdeploy may delete in");
         }
 
-        // No folder between the tool root and the path may be a symlink: a path that
-        // reaches shared/ through a release's link must never be deleted.
-        $root = self::normalize($this->paths->root());
-        $parent = dirname($normal);
-        $realRoot = realpath($root);
-        $realParent = realpath($parent);
-        if ($realRoot !== false && $realParent !== false
-            && $realParent !== $realRoot . substr($parent, strlen($root))) {
-            throw new RuntimeException("Refusing to delete {$path}: a folder above it is a symlink");
-        }
+        $this->assertNoSymlinkAbove($normal, $base);
 
         if ($releaseSite !== null) {
-            $current = $this->paths->current($releaseSite);
-            $live = is_link($current) ? realpath($current) : false;
-            $real = is_link($normal) ? false : realpath($normal);
-            if ($live !== false && $real !== false && ($real === $live || self::isInside($live, $real))) {
-                throw new RuntimeException("Refusing to delete {$path}: it is the live release");
-            }
+            $this->assertNotLive($releaseSite, $normal, $path);
+        }
+    }
+
+    private function assertNotLive(string $site, string $normal, string $path): void
+    {
+        $current = $this->paths->current($site);
+        $live = is_link($current) ? realpath($current) : false;
+        $real = is_link($normal) ? false : realpath($normal);
+        if ($live !== false && $real !== false && ($real === $live || self::isInside($live, $real))) {
+            throw new RuntimeException("Refusing to delete {$path}: it is the live release");
+        }
+    }
+
+    /**
+     * No folder between $base and $path may be a symlink: a path that reaches
+     * shared/ through a release's link must never be deleted.
+     */
+    private function assertNoSymlinkAbove(string $path, string $base): void
+    {
+        $parent = dirname($path);
+        $realBase = realpath($base);
+        $realParent = realpath($parent);
+        if ($realBase !== false && $realParent !== false
+            && $realParent !== $realBase . substr($parent, strlen($base))) {
+            throw new RuntimeException("Refusing to delete {$path}: a folder above it is a symlink");
         }
     }
 

@@ -688,6 +688,7 @@ final class Services
             $this->nodeLocator(),
             $this->nodeResolver(),
             $this->nodeInstaller(),
+            $this->paths(),
         );
     }
 
@@ -804,6 +805,7 @@ final class Services
             $this->tokenService(),
             $this->hostKeys(),
             $this->clock(),
+            $this->paths(),
         ));
     }
 

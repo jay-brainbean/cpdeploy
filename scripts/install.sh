@@ -62,7 +62,7 @@ if [ "$UNINSTALL" = "1" ]; then
         fi
     done
     say "cpdeploy was removed."
-    say "Your sites keep running. Their data is in ~/cpdeploy/sites; remove it yourself if you're sure."
+    say "Your sites keep running. Their files are in ~/cpdeploy_sites and their settings in ~/cpdeploy/sites; remove them yourself if you're sure."
     exit 0
 fi
 

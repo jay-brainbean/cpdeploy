@@ -137,8 +137,8 @@ final class DeployGuardsTest extends DeployScenario
     public function testPruneKeepsLiveProtectedAndNewest(): void
     {
         $this->writeSite(['releases' => ['keep' => 2]]);
-        mkdir($this->siteDir . '/shared/storage/app', 0755, true);
-        file_put_contents($this->siteDir . '/shared/storage/app/sentinel', 'keep me');
+        mkdir($this->siteFiles . '/shared/storage/app', 0755, true);
+        file_put_contents($this->siteFiles . '/shared/storage/app/sentinel', 'keep me');
 
         $this->assertExit(0, $this->deploy(['--yes']));                 // A
         $a = basename($this->liveDir());
@@ -160,7 +160,7 @@ final class DeployGuardsTest extends DeployScenario
         self::assertSame([$a, $d, $e], array_keys($this->releases()));
         self::assertNotContains($b, array_keys($this->releases()));
         self::assertTrue($this->releases()[$a]['protected']);
-        self::assertSame('keep me', file_get_contents($this->siteDir . '/shared/storage/app/sentinel'));
+        self::assertSame('keep me', file_get_contents($this->siteFiles . '/shared/storage/app/sentinel'));
         self::assertStringContainsString('kept 3 releases, removed 1', $r['stdout']);
     }
 
@@ -207,6 +207,11 @@ final class DeployGuardsTest extends DeployScenario
         $this->assertExit(2, $bad);
         self::assertStringContainsString('releases.keep: must be a whole number from 2 to 30', $bad['stderr']);
         self::assertSame(8, $this->site()['releases']['keep']);
+        // LAY-04: the site's files live in site_dir; it can't be pointed elsewhere.
+        $move = $this->runCli(['config', self::SITE, 'set', 'site_dir', 'elsewhere']);
+        $this->assertExit(2, $move);
+        self::assertStringContainsString("site_dir can't be changed", $move['stderr']);
+        self::assertSame('cpdeploy_sites/' . self::DOMAIN, $this->site()['site_dir']);
 
         $noSite = $this->runCli(['deploy']);
         $this->assertExit(2, $noSite);

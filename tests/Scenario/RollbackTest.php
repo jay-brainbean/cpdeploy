@@ -51,7 +51,7 @@ final class RollbackTest extends DeployScenario
     public function testRollbackToThePreviousRelease(): void
     {
         [$first, $second] = $this->twoReleases();
-        $env = (string) file_get_contents($this->siteDir . '/shared/.env');
+        $env = (string) file_get_contents($this->siteFiles . '/shared/.env');
         $calls = count($this->artisanCalls());
 
         $r = $this->rollback(['--previous', '--yes']);
@@ -74,7 +74,7 @@ final class RollbackTest extends DeployScenario
         self::assertStringContainsString('-rollback.log', (string) $last['log']);
         self::assertMatchesRegularExpression('/^health: 200 in /m', implode("\n", $last['notes']));
         // RB-08: .env untouched; the health marker was removed.
-        self::assertSame($env, file_get_contents($this->siteDir . '/shared/.env'));
+        self::assertSame($env, file_get_contents($this->siteFiles . '/shared/.env'));
         self::assertSame([], glob($this->liveDir() . '/public/.cpd-release-*') ?: []);
         self::assertStringContainsString('Rolled back to ' . $first, $r['stdout']);
     }
@@ -181,7 +181,7 @@ final class RollbackTest extends DeployScenario
         self::assertCount(1, $sets);
         self::assertSame('ea-php82', $sets[0]['args']['version']);
         self::assertSame('releases/' . $first, $sets[0]['link'] ?? null, 'a downgrade changes MultiPHP after the switch');
-        self::assertStringContainsString('ea-php82', (string) file_get_contents($this->siteDir . '/releases/' . $first . '/public/.htaccess'));
+        self::assertStringContainsString('ea-php82', (string) file_get_contents($this->siteFiles . '/releases/' . $first . '/public/.htaccess'));
         self::assertSame('ready', $this->releases()[$second]['status']);
     }
 
