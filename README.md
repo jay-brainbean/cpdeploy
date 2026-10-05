@@ -12,13 +12,77 @@ switching the site over atomically.
 
 ## Requirements
 
-- A cPanel account (EasyApache 4) with shell access: SSH or cPanel's Terminal.
-- Any PHP 8.1 or newer installed on the server, with the `phar` and `mbstring`
-  extensions. It doesn't have to be the PHP version your sites use.
-- `proc_open`, `exec` and `shell_exec` must be allowed for that PHP.
-- `git`, `ssh`, `curl`, `tar` and the usual shell tools.
+cpdeploy uses **two** PHPs, which can be different versions:
 
-cpdeploy never needs root, and refuses to run as root.
+- the **tool PHP** runs cpdeploy itself;
+- the **site PHP** (the version you pick for each site) runs Composer and your
+  app's commands, such as `php artisan migrate`.
+
+Extensions are added in WHM → **EasyApache 4** → *Customize* → *PHP
+Extensions* (packages are named `ea-phpXX-php-<extension>`, e.g.
+`ea-php84-php-iconv`). Settings are changed in WHM → **MultiPHP INI Editor**.
+If you don't have WHM, ask your host.
+
+### Account
+
+- A cPanel account (EasyApache 4, MultiPHP) with shell access: SSH or cPanel's
+  Terminal. cpdeploy never needs root, and refuses to run as root.
+- These programs in the shell: `git` (2.20 or newer recommended, 2.3 at
+  least), `ssh`, `ssh-keygen`, `curl`, `tar`, `gzip`, GNU `cp`, `du`, `stty`
+  and `sha256sum`. `less` is optional.
+
+### Tool PHP
+
+Any PHP 8.1 or newer on the server; it doesn't have to be the version your
+sites use. The installer picks the newest EasyApache `ea-php`, then CloudLinux
+`alt-php`, then `php` on your PATH (or set `CPDEPLOY_PHP=/path/to/php`).
+
+| Needs | What | If it's missing |
+|---|---|---|
+| Required | `phar`, `mbstring` and `iconv` extensions | cpdeploy doesn't start; the installer stops with "Box Requirements Checker" |
+| Required | `proc_open`, `exec` and `shell_exec` not listed in `disable_functions` | cpdeploy refuses to start |
+| Recommended | `pcntl` and `posix` extensions | spinners don't animate, Ctrl+C is less graceful, and timeouts stop only the main process |
+
+### Site PHP
+
+The version and extensions your app needs, as listed in its `composer.lock`.
+cpdeploy checks these when you add a site and before every deploy.
+
+| Needs | What | If it's missing |
+|---|---|---|
+| Required | `curl` extension, **or** `allow_url_fopen = On` | `composer install` fails with "allow_url_fopen must be enabled" |
+| Required | `openssl` extension | Composer can't download over HTTPS |
+| Required | `proc_open` not listed in `disable_functions` | Composer can't run git or its scripts (e.g. `package:discover`) |
+| Required | `zip` extension, or the `unzip` program | Composer can't unpack packages and `composer install` fails |
+| Laravel | `ctype`, `dom`, `fileinfo`, `filter`, `hash`, `session`, `tokenizer`, `xml`, and `pdo_mysql` (MySQL) or `pdo_sqlite` (SQLite) | the deploy stops at the PHP check when `composer.lock` lists the extension; otherwise the site fails when it runs |
+
+The curl extension is the better choice of the two: `allow_url_fopen` also
+changes how your website runs.
+
+### Network
+
+The server must be able to connect out to:
+
+- **GitHub over SSH**: `github.com` port 22, or `ssh.github.com` port 443;
+- **Composer**: `getcomposer.org`, `repo.packagist.org`, and `api.github.com`
+  and `codeload.github.com` (where most packages are downloaded from);
+- **Node.js** (only if cpdeploy downloads Node for you): `nodejs.org`;
+- **npm** (only for a frontend build): `registry.npmjs.org`;
+- **GitHub API** (only with the optional GitHub token): `api.github.com`.
+
+### Check before installing
+
+Replace `84` with your tool PHP's version and `83` with your site's:
+
+```sh
+/opt/cpanel/ea-php84/root/usr/bin/php -m | grep -iE '^(phar|mbstring|iconv)$'
+/opt/cpanel/ea-php83/root/usr/bin/php -m | grep -iE '^(curl|openssl|zip)$'
+/opt/cpanel/ea-php83/root/usr/bin/php -r 'echo ini_get("disable_functions"), "\n";'
+```
+
+The first two commands should each print three lines (if `zip` is missing,
+`unzip` must be installed instead), and the last must not list `proc_open`. After installing,
+`cpdeploy check` checks the rest.
 
 ## Install
 
